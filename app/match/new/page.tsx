@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getPlayers, addMatchesBulk, getHistory, revertHistoryEntry, seedInitialData } from '../../../lib/storage';
+import { getAllData, addMatchesBulk, revertHistoryEntry } from '../../../lib/storage';
 import type { Player, HistoryEntry } from '../../../lib/types';
 
 const ACTION_LABELS: Record<string, string> = {
@@ -34,25 +34,32 @@ export default function NewMatchPage() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-
-  function refreshHistory() {
-    setHistory(getHistory());
-  }
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    seedInitialData();
-    const p = getPlayers();
-    setPlayers(p);
-    if (p.length >= 1) setP1Id(p[0].id);
-    if (p.length >= 2) setP2Id(p[1].id);
-    refreshHistory();
-    const handler = () => refreshHistory();
-    window.addEventListener('pinguipongui_change', handler);
-    window.addEventListener('storage', handler);
-    return () => {
-      window.removeEventListener('pinguipongui_change', handler);
-      window.removeEventListener('storage', handler);
-    };
+    let cancelled = false;
+    async function init() {
+      try {
+        const data = await getAllData();
+        if (cancelled) return;
+        setPlayers(data.players);
+        if (data.players.length >= 1) setP1Id(data.players[0].id);
+        if (data.players.length >= 2) setP2Id(data.players[1].id);
+        setHistory(data.history);
+        setLoadError(false);
+      } catch {
+        if (!cancelled) setLoadError(true);
+      }
+    }
+    init();
+    const interval = setInterval(async () => {
+      if (cancelled) return;
+      try {
+        const data = await getAllData();
+        if (!cancelled) setHistory(data.history);
+      } catch { /* silently retry on next poll */ }
+    }, 8000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
   const p1 = players.find((p) => p.id === p1Id);
@@ -71,10 +78,10 @@ export default function NewMatchPage() {
     setEntries((prev) => prev.slice(0, -1));
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (entries.length === 0) return;
     setSaving(true);
-    addMatchesBulk(entries);
+    await addMatchesBulk(entries);
     router.push('/');
   }
 
@@ -91,7 +98,11 @@ export default function NewMatchPage() {
         <div className="page-subtitle">Record results</div>
       </div>
 
-      {players.length < 2 ? (
+      {loadError ? (
+        <div className="empty-state">
+          <div className="label-muted">Failed to load data — check your connection and refresh</div>
+        </div>
+      ) : players.length < 2 ? (
         <div className="empty-state">
           <div className="empty-number">!</div>
           <div className="label-muted" style={{ marginTop: '16px' }}>
@@ -412,9 +423,11 @@ export default function NewMatchPage() {
                     <button
                       type="button"
                       className="btn-secondary"
-                      onClick={() => {
+                      onClick={async () => {
                         if (!confirm(`Revert "${entry.description}"?`)) return;
-                        revertHistoryEntry(entry.id);
+                        await revertHistoryEntry(entry.id);
+                        const data = await getAllData();
+                        setHistory(data.history);
                       }}
                       style={{ fontSize: '9px', padding: '8px 12px' }}
                     >

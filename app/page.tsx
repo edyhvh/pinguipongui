@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getPlayers, getMatches, getPlayerStatsExtended, seedInitialData } from '../lib/storage';
+import { getAllData, getPlayerStatsExtended } from '../lib/storage';
 import type { Player, Match, PlayerStatsExtended } from '../lib/types';
 
 function formatPct(value: number): string {
@@ -235,15 +235,26 @@ export default function HomePage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [stats, setStats] = useState<PlayerStatsExtended[]>([]);
   const [mounted, setMounted] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    seedInitialData();
-    const p = getPlayers();
-    const m = getMatches();
-    setPlayers(p);
-    setMatches(m);
-    setStats(getPlayerStatsExtended(p, m));
-    setMounted(true);
+    let cancelled = false;
+    async function load() {
+      try {
+        const data = await getAllData();
+        if (cancelled) return;
+        setPlayers(data.players);
+        setMatches(data.matches);
+        setStats(getPlayerStatsExtended(data.players, data.matches));
+        setLoadError(false);
+        setMounted(true);
+      } catch {
+        if (!cancelled && !mounted) setLoadError(true);
+      }
+    }
+    load();
+    const interval = setInterval(load, 10000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
   const year = new Date().getFullYear();
@@ -302,7 +313,11 @@ export default function HomePage() {
           )}
         </div>
 
-        {!mounted ? null : stats.length === 0 ? (
+        {loadError ? (
+          <div className="empty-state">
+            <div className="label-muted">Failed to load data — check your connection and refresh</div>
+          </div>
+        ) : !mounted ? null : stats.length === 0 ? (
           <div className="empty-state">
             <div className="empty-number">0</div>
             <div className="label-muted" style={{ marginTop: '16px' }}>

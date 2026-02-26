@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getPlayers, addPlayer, removePlayer, getMatches, getPlayerStats, seedInitialData } from '../../lib/storage';
+import { getAllData, addPlayer, removePlayer, getPlayerStats } from '../../lib/storage';
 import type { Player, PlayerStats } from '../../lib/types';
 
 export default function PlayersPage() {
@@ -12,20 +12,27 @@ export default function PlayersPage() {
   const [success, setSuccess] = useState('');
   const [mounted, setMounted] = useState(false);
 
-  function refresh() {
-    const p = getPlayers();
-    const m = getMatches();
-    setPlayers(p);
-    setStats(getPlayerStats(p, m));
+  async function refresh() {
+    const data = await getAllData();
+    setPlayers(data.players);
+    setStats(getPlayerStats(data.players, data.matches));
   }
 
   useEffect(() => {
-    seedInitialData();
-    refresh();
-    setMounted(true);
+    let cancelled = false;
+    async function load() {
+      const data = await getAllData();
+      if (cancelled) return;
+      setPlayers(data.players);
+      setStats(getPlayerStats(data.players, data.matches));
+      setMounted(true);
+    }
+    load();
+    const interval = setInterval(() => { if (!cancelled) load(); }, 10000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
-  function handleAdd(e: React.FormEvent) {
+  async function handleAdd(e: { preventDefault(): void }) {
     e.preventDefault();
     setError('');
     setSuccess('');
@@ -34,19 +41,26 @@ export default function PlayersPage() {
       return;
     }
     try {
-      const player = addPlayer(name);
+      const player = await addPlayer(name);
       setSuccess(`${player.name} added`);
       setName('');
-      refresh();
+      await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     }
   }
 
-  function handleRemove(id: string, playerName: string) {
+  async function handleRemove(id: string, playerName: string) {
     if (!confirm(`Remove ${playerName}? Their match history will remain.`)) return;
-    removePlayer(id);
-    refresh();
+    setError('');
+    setSuccess('');
+    try {
+      await removePlayer(id);
+      setSuccess(`${playerName} removed`);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong');
+    }
   }
 
   const statMap = new Map(stats.map((s) => [s.player.id, s]));
