@@ -3,18 +3,18 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getPlayers, addMatch, seedInitialData } from '../../../lib/storage';
+import { getPlayers, addMatchesBulk, seedInitialData } from '../../../lib/storage';
 import type { Player } from '../../../lib/types';
+
+type Entry = { winnerId: string; loserId: string };
 
 export default function NewMatchPage() {
   const router = useRouter();
   const [players, setPlayers] = useState<Player[]>([]);
   const [p1Id, setP1Id] = useState('');
   const [p2Id, setP2Id] = useState('');
-  const [p1Score, setP1Score] = useState<number | ''>('');
-  const [p2Score, setP2Score] = useState<number | ''>('');
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     seedInitialData();
@@ -26,127 +26,38 @@ export default function NewMatchPage() {
 
   const p1 = players.find((p) => p.id === p1Id);
   const p2 = players.find((p) => p.id === p2Id);
-  const p1Won =
-    typeof p1Score === 'number' &&
-    typeof p2Score === 'number' &&
-    p1Score !== p2Score
-      ? p1Score > p2Score
-      : null;
-  const winner = p1Won === true ? p1 : p1Won === false ? p2 : null;
+  const playersSelected = p1Id && p2Id && p1Id !== p2Id;
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError('');
+  const p1Wins = entries.filter((e) => e.winnerId === p1Id).length;
+  const p2Wins = entries.filter((e) => e.winnerId === p2Id).length;
+  const total = entries.length;
 
-    if (!p1Id || !p2Id) {
-      setError('Select both players');
-      return;
-    }
-    if (p1Id === p2Id) {
-      setError('Players must be different');
-      return;
-    }
-    if (p1Score === '' || p2Score === '') {
-      setError('Enter scores for both players');
-      return;
-    }
-    if (p1Score === p2Score) {
-      setError('Tie games not allowed — someone has to win');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      addMatch(p1Id, p2Id, Number(p1Score), Number(p2Score));
-      router.push('/');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
-      setSubmitting(false);
-    }
+  function recordWin(winnerId: string, loserId: string) {
+    setEntries((prev) => [...prev, { winnerId, loserId }]);
   }
 
-  function ScoreButton({
-    player,
-    score,
-    onScore,
-  }: {
-    player: Player | undefined;
-    score: number | '';
-    onScore: (s: number) => void;
-  }) {
-    return (
-      <div style={{ flex: 1 }}>
-        <div className="label-muted" style={{ marginBottom: '12px' }}>
-          {player?.name ?? 'Player'}
-        </div>
-        <div
-          className="score-display"
-          style={{
-            color: score === '' ? '#e8e4dc' : '#000',
-          }}
-        >
-          {score === '' ? '—' : score}
-        </div>
-        <div
-          style={{ display: 'flex', gap: '8px', marginTop: '20px', flexWrap: 'wrap' }}
-        >
-          <button
-            type="button"
-            className="btn-primary"
-            style={{ fontSize: '18px', padding: '12px 20px', letterSpacing: '0' }}
-            onClick={() => onScore(typeof score === 'number' ? score + 1 : 1)}
-          >
-            +
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            style={{ fontSize: '18px', padding: '12px 20px', letterSpacing: '0' }}
-            onClick={() => onScore(typeof score === 'number' && score > 0 ? score - 1 : 0)}
-          >
-            −
-          </button>
-          <button
-            type="button"
-            className="btn-ghost"
-            style={{ fontSize: '20px' }}
-            onClick={() => onScore(0)}
-          >
-            ×
-          </button>
-        </div>
-        {/* Quick-set common scores */}
-        <div style={{ display: 'flex', gap: '4px', marginTop: '12px', flexWrap: 'wrap' }}>
-          {[11, 15, 21].map((n) => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => onScore(n)}
-              style={{
-                background: score === n ? '#000' : 'transparent',
-                color: score === n ? '#f4f1eb' : '#000',
-                border: '1px solid #000',
-                fontFamily: 'inherit',
-                fontSize: '10px',
-                fontWeight: 400,
-                letterSpacing: '0.12em',
-                padding: '4px 10px',
-                cursor: 'pointer',
-              }}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
-      </div>
-    );
+  function undoLast() {
+    setEntries((prev) => prev.slice(0, -1));
+  }
+
+  function handleSave() {
+    if (entries.length === 0) return;
+    setSaving(true);
+    addMatchesBulk(entries);
+    router.push('/');
+  }
+
+  function handlePlayerChange(slot: 1 | 2, id: string) {
+    if (slot === 1) setP1Id(id);
+    else setP2Id(id);
+    setEntries([]);
   }
 
   return (
     <main className="page">
       <div className="page-hero">
         <div className="page-title">New<br />Match</div>
-        <div className="page-subtitle">Record a result</div>
+        <div className="page-subtitle">Record results</div>
       </div>
 
       {players.length < 2 ? (
@@ -160,7 +71,7 @@ export default function NewMatchPage() {
           </div>
         </div>
       ) : (
-        <form onSubmit={handleSubmit}>
+        <>
           {/* Player selectors */}
           <div
             style={{
@@ -172,153 +83,225 @@ export default function NewMatchPage() {
             }}
           >
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label htmlFor="p1" className="form-label">
-                Player 1
-              </label>
+              <label htmlFor="p1" className="form-label">Player 1</label>
               <select
                 id="p1"
                 className="form-select"
                 value={p1Id}
-                onChange={(e) => {
-                  setP1Id(e.target.value);
-                  setError('');
-                }}
+                onChange={(e) => handlePlayerChange(1, e.target.value)}
               >
                 {players.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
+                  <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
             </div>
 
-            <div
-              style={{
-                textAlign: 'center',
-                paddingBottom: '12px',
-              }}
-            >
+            <div style={{ textAlign: 'center', paddingBottom: '12px' }}>
               <span className="label-muted">VS</span>
             </div>
 
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label htmlFor="p2" className="form-label">
-                Player 2
-              </label>
+              <label htmlFor="p2" className="form-label">Player 2</label>
               <select
                 id="p2"
                 className="form-select"
                 value={p2Id}
-                onChange={(e) => {
-                  setP2Id(e.target.value);
-                  setError('');
-                }}
+                onChange={(e) => handlePlayerChange(2, e.target.value)}
               >
                 {players.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
+                  <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          <div className="divider" style={{ marginBottom: '48px' }} />
+          {p1Id === p2Id && (
+            <div className="msg-error" style={{ marginBottom: '24px' }}>
+              Select two different players
+            </div>
+          )}
 
-          {/* Score inputs */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr auto 1fr',
-              gap: '32px',
-              alignItems: 'start',
-              marginBottom: '48px',
-            }}
-          >
-            <ScoreButton
-              player={p1}
-              score={p1Score}
-              onScore={(s) => { setP1Score(s); setError(''); }}
-            />
+          {playersSelected && (
+            <>
+              <div className="divider" style={{ marginBottom: '40px' }} />
 
-            {/* Center divider + winner reveal */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                paddingTop: '48px',
-                gap: '16px',
-              }}
-            >
+              {/* Win buttons */}
               <div
                 style={{
-                  width: 1,
-                  height: '80px',
-                  backgroundColor: '#000',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '16px',
+                  marginBottom: '40px',
                 }}
-              />
-              {winner && (
-                <div style={{ textAlign: 'center' }}>
+              >
+                <button
+                  type="button"
+                  onClick={() => recordWin(p1Id, p2Id)}
+                  style={{
+                    background: 'transparent',
+                    border: '2px solid #000',
+                    cursor: 'pointer',
+                    padding: '32px 16px',
+                    textAlign: 'center',
+                    fontFamily: 'inherit',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.05)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
                   <div
                     style={{
-                      width: 8,
-                      height: 8,
-                      backgroundColor: '#ff4500',
-                      margin: '0 auto 8px',
-                    }}
-                  />
-                  <div
-                    className="label"
-                    style={{ color: '#ff4500', fontSize: '9px' }}
-                  >
-                    Winner
-                  </div>
-                  <div
-                    style={{
-                      fontSize: '14px',
+                      fontSize: 'clamp(28px, 4vw, 40px)',
                       fontWeight: 900,
-                      letterSpacing: '-0.01em',
-                      textTransform: 'uppercase',
-                      marginTop: '4px',
+                      letterSpacing: '-0.03em',
+                      lineHeight: 1,
                     }}
                   >
-                    {winner.name}
+                    {p1?.name}
                   </div>
+                  <div className="label-muted" style={{ marginTop: '8px' }}>won</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => recordWin(p2Id, p1Id)}
+                  style={{
+                    background: 'transparent',
+                    border: '2px solid #000',
+                    cursor: 'pointer',
+                    padding: '32px 16px',
+                    textAlign: 'center',
+                    fontFamily: 'inherit',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.05)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <div
+                    style={{
+                      fontSize: 'clamp(28px, 4vw, 40px)',
+                      fontWeight: 900,
+                      letterSpacing: '-0.03em',
+                      lineHeight: 1,
+                    }}
+                  >
+                    {p2?.name}
+                  </div>
+                  <div className="label-muted" style={{ marginTop: '8px' }}>won</div>
+                </button>
+              </div>
+
+              {/* Tally */}
+              {total > 0 && (
+                <>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr auto 1fr',
+                      gap: '16px',
+                      alignItems: 'center',
+                      marginBottom: '32px',
+                      padding: '24px 0',
+                      borderTop: '1px solid #000',
+                      borderBottom: '1px solid #000',
+                    }}
+                  >
+                    {/* P1 tally */}
+                    <div style={{ textAlign: 'center' }}>
+                      <div
+                        style={{
+                          fontSize: 'clamp(48px, 8vw, 80px)',
+                          fontWeight: 900,
+                          letterSpacing: '-0.05em',
+                          lineHeight: 1,
+                          color: p1Wins > p2Wins ? '#ff4500' : '#000',
+                        }}
+                      >
+                        {p1Wins}
+                      </div>
+                      <div className="label-muted" style={{ marginTop: '4px' }}>{p1?.name}</div>
+                    </div>
+
+                    {/* Center */}
+                    <div style={{ textAlign: 'center' }}>
+                      <div className="label-muted">{total} {total === 1 ? 'game' : 'games'}</div>
+                    </div>
+
+                    {/* P2 tally */}
+                    <div style={{ textAlign: 'center' }}>
+                      <div
+                        style={{
+                          fontSize: 'clamp(48px, 8vw, 80px)',
+                          fontWeight: 900,
+                          letterSpacing: '-0.05em',
+                          lineHeight: 1,
+                          color: p2Wins > p1Wins ? '#ff4500' : '#000',
+                        }}
+                      >
+                        {p2Wins}
+                      </div>
+                      <div className="label-muted" style={{ marginTop: '4px' }}>{p2?.name}</div>
+                    </div>
+                  </div>
+
+                  {/* Game log */}
+                  <div style={{ marginBottom: '32px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {entries.map((e, i) => {
+                      const winner = players.find((p) => p.id === e.winnerId);
+                      const isLast = i === entries.length - 1;
+                      return (
+                        <div
+                          key={i}
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            letterSpacing: '0.08em',
+                            textTransform: 'uppercase',
+                            padding: '4px 8px',
+                            border: `1px solid ${isLast ? '#ff4500' : '#ccc'}`,
+                            color: isLast ? '#ff4500' : '#666',
+                          }}
+                        >
+                          {winner?.name}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={handleSave}
+                      disabled={saving}
+                      style={{ fontSize: '11px' }}
+                    >
+                      {saving ? 'Saving...' : `Save ${total} ${total === 1 ? 'Game' : 'Games'}`}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={undoLast}
+                      style={{ fontSize: '11px' }}
+                    >
+                      Undo Last
+                    </button>
+                    <Link href="/" className="btn-ghost" style={{ fontSize: '11px' }}>
+                      Cancel
+                    </Link>
+                  </div>
+                </>
+              )}
+
+              {total === 0 && (
+                <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                  <div className="label-muted">Tap a player above to record who won each game</div>
                 </div>
               )}
-            </div>
-
-            <ScoreButton
-              player={p2}
-              score={p2Score}
-              onScore={(s) => { setP2Score(s); setError(''); }}
-            />
-          </div>
-
-          {error && <div className="msg-error">{error}</div>}
-
-          <div
-            style={{
-              display: 'flex',
-              gap: '16px',
-              alignItems: 'center',
-              marginTop: '32px',
-            }}
-          >
-            <button
-              type="submit"
-              className="btn-primary"
-              disabled={submitting}
-              style={{ fontSize: '11px' }}
-            >
-              {submitting ? 'Saving...' : 'Save Match'}
-            </button>
-            <Link href="/" className="btn-secondary" style={{ fontSize: '11px' }}>
-              Cancel
-            </Link>
-          </div>
-        </form>
+            </>
+          )}
+        </>
       )}
     </main>
   );

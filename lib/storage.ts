@@ -130,28 +130,38 @@ function saveMatches(matches: Match[]): void {
   localStorage.setItem(MATCHES_KEY, JSON.stringify(matches));
 }
 
-export function addMatch(
-  player1Id: string,
-  player2Id: string,
-  player1Score: number,
-  player2Score: number,
-): Match {
-  if (player1Id === player2Id) throw new Error('Players must be different');
-  if (player1Score === player2Score) throw new Error('Tie games are not allowed');
-  const winnerId = player1Score > player2Score ? player1Id : player2Id;
-  const loserId = player1Score > player2Score ? player2Id : player1Id;
+export function addMatch(winnerId: string, loserId: string): Match {
+  if (winnerId === loserId) throw new Error('Players must be different');
   const match: Match = {
     id: crypto.randomUUID(),
-    player1Id,
-    player2Id,
-    player1Score,
-    player2Score,
+    player1Id: winnerId,
+    player2Id: loserId,
+    player1Score: 1,
+    player2Score: 0,
     winnerId,
     loserId,
     playedAt: new Date().toISOString(),
   };
   saveMatches([match, ...getMatches()]);
   return match;
+}
+
+export function addMatchesBulk(entries: Array<{ winnerId: string; loserId: string }>): void {
+  if (entries.length === 0) return;
+  const base = Date.now();
+  const newMatches: Match[] = entries.map((e, i) => ({
+    id: crypto.randomUUID(),
+    player1Id: e.winnerId,
+    player2Id: e.loserId,
+    player1Score: 1,
+    player2Score: 0,
+    winnerId: e.winnerId,
+    loserId: e.loserId,
+    // space them 1s apart so order is preserved
+    playedAt: new Date(base + i * 1000).toISOString(),
+  }));
+  // newest first
+  saveMatches([...newMatches.reverse(), ...getMatches()]);
 }
 
 export function removeMatch(id: string): void {
