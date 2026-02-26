@@ -235,6 +235,7 @@ export default function HomePage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [stats, setStats] = useState<PlayerStatsExtended[]>([]);
   const [mounted, setMounted] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -245,8 +246,11 @@ export default function HomePage() {
         setPlayers(data.players);
         setMatches(data.matches);
         setStats(getPlayerStatsExtended(data.players, data.matches));
+        setLoadError(false);
         setMounted(true);
-      } catch {}
+      } catch {
+        if (!cancelled && !mounted) setLoadError(true);
+      }
     }
     load();
     const interval = setInterval(load, 10000);
@@ -309,7 +313,11 @@ export default function HomePage() {
           )}
         </div>
 
-        {!mounted ? null : stats.length === 0 ? (
+        {loadError ? (
+          <div className="empty-state">
+            <div className="label-muted">Failed to load data — check your connection and refresh</div>
+          </div>
+        ) : !mounted ? null : stats.length === 0 ? (
           <div className="empty-state">
             <div className="empty-number">0</div>
             <div className="label-muted" style={{ marginTop: '16px' }}>

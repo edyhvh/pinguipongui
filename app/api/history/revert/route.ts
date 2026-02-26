@@ -1,23 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readData, writeData } from '../../../../lib/blob';
-import { Mutex } from 'async-mutex';
-
-const revertMutex = new Mutex();
+import { withLock } from '../../../../lib/lock';
 
 export async function POST(req: NextRequest) {
-  return revertMutex.runExclusive(async () => {
-    try {
-      const body = await req.json().catch(() => null);
-      if (!body || typeof body.id !== 'string' || !body.id.trim()) {
-        return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
-      }
+  try {
+    const body = await req.json().catch(() => null);
+    const id = typeof body?.id === 'string' ? body.id.trim() : '';
+    if (!id || id.length > 64 || !/^[a-zA-Z0-9_-]+$/.test(id)) {
+      return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+    }
 
-      const { id } = body;
+    await withLock(async () => {
       const data = await readData();
       const entry = data.history.find((e) => e.id === id);
-      if (!entry) return NextResponse.json({ error: 'History entry not found' }, { status: 404 });
+      if (!entry) throw Object.assign(new Error('History entry not found'), { status: 404 });
       if (entry.action === 'revert') {
-        return NextResponse.json({ error: 'Cannot revert a revert' }, { status: 400 });
+        throw Object.assign(new Error('Cannot revert a revert'), { status: 400 });
       }
 
       let { matches, players } = data;
@@ -42,24 +40,24 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const revertEntry = {
-        id: crypto.randomUUID(),
-        timestamp: new Date().toISOString(),
-        action: 'revert' as const,
-        description: `Reverted: ${entry.description}`,
-      };
-
       await writeData({
         ...data,
         players,
         matches,
-        history: [revertEntry, ...data.history.filter((e) => e.id !== id)],
+        history: [{
+          id: crypto.randomUUID(),
+          timestamp: new Date().toISOString(),
+          action: 'revert' as const,
+          description: `Reverted: ${entry.description}`,
+        }, ...data.history.filter((e) => e.id !== id)],
       });
+    });
 
-      return NextResponse.json({ ok: true });
-    } catch (err) {
-      console.error('POST /api/history/revert:', err);
-      return NextResponse.json({ error: 'Failed to revert' }, { status: 500 });
-    }
-  });
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    if (err?.status === 404) return NextResponse.json({ error: err.message }, { status: 404 });
+    if (err?.status === 400) return NextResponse.json({ error: err.message }, { status: 400 });
+    console.error('POST /api/history/revert:', err);
+    return NextResponse.json({ error: 'Failed to revert' }, { status: 500 });
+  }
 }

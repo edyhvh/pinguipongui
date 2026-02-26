@@ -36,7 +36,8 @@ export async function readData(): Promise<AppData> {
       history: Array.isArray(raw.history) ? raw.history : [],
       seeded: !!raw.seeded,
     };
-  } catch {
+  } catch (err) {
+    console.error('readData failed:', err);
     return emptyData();
   }
 }

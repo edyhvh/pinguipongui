@@ -34,22 +34,30 @@ export default function NewMatchPage() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     async function init() {
-      const data = await getAllData();
-      if (cancelled) return;
-      setPlayers(data.players);
-      if (data.players.length >= 1) setP1Id(data.players[0].id);
-      if (data.players.length >= 2) setP2Id(data.players[1].id);
-      setHistory(data.history);
+      try {
+        const data = await getAllData();
+        if (cancelled) return;
+        setPlayers(data.players);
+        if (data.players.length >= 1) setP1Id(data.players[0].id);
+        if (data.players.length >= 2) setP2Id(data.players[1].id);
+        setHistory(data.history);
+        setLoadError(false);
+      } catch {
+        if (!cancelled) setLoadError(true);
+      }
     }
     init();
     const interval = setInterval(async () => {
       if (cancelled) return;
-      const data = await getAllData();
-      if (!cancelled) setHistory(data.history);
+      try {
+        const data = await getAllData();
+        if (!cancelled) setHistory(data.history);
+      } catch { /* silently retry on next poll */ }
     }, 8000);
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
@@ -90,7 +98,11 @@ export default function NewMatchPage() {
         <div className="page-subtitle">Record results</div>
       </div>
 
-      {players.length < 2 ? (
+      {loadError ? (
+        <div className="empty-state">
+          <div className="label-muted">Failed to load data — check your connection and refresh</div>
+        </div>
+      ) : players.length < 2 ? (
         <div className="empty-state">
           <div className="empty-number">!</div>
           <div className="label-muted" style={{ marginTop: '16px' }}>
