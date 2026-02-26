@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readData, writeData } from '../../../lib/blob';
+import { readData, writeData, emptyData } from '../../../lib/blob';
 import { withLock } from '../../../lib/lock';
 
 // Only letters, numbers, spaces, apostrophes, hyphens — no HTML
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     if (!NAME_RE.test(name)) return NextResponse.json({ error: 'Name contains invalid characters' }, { status: 400 });
 
     const player = await withLock(async () => {
-      const data = await readData();
+      const data = await readData() ?? emptyData();
       if (data.players.some((p) => p.name === name)) {
         throw Object.assign(new Error('Player already exists'), { status: 409 });
       }
@@ -60,7 +60,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     await withLock(async () => {
-      const data = await readData();
+      const data = await readData() ?? emptyData();
       const player = data.players.find((p) => p.id === id);
       if (!player) throw Object.assign(new Error('Player not found'), { status: 404 });
 

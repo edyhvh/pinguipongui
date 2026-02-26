@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     }
 
     await withLock(async () => {
-      const data = await readData();
+      const data = await readData() ?? { players: [], matches: [], history: [], seeded: true };
       const entry = data.history.find((e) => e.id === id);
       if (!entry) throw Object.assign(new Error('History entry not found'), { status: 404 });
       if (entry.action === 'revert') {

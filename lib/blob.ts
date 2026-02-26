@@ -1,5 +1,5 @@
 // Server-only — no 'use client'
-import { put, list, get as getBlob } from '@vercel/blob';
+import { put, list } from '@vercel/blob';
 import type { Player, Match, HistoryEntry } from './types';
 
 export interface AppData {
@@ -12,39 +12,36 @@ export interface AppData {
 const BLOB_PATHNAME = 'pinguipongui-data.json';
 const MAX_HISTORY = 100;
 
-function emptyData(): AppData {
+export function emptyData(): AppData {
   return { players: [], matches: [], history: [], seeded: false };
 }
 
-export async function readData(): Promise<AppData> {
-  try {
-    const { blobs } = await list({ prefix: BLOB_PATHNAME });
-    if (blobs.length === 0) return emptyData();
+// Returns null if the blob doesn't exist yet, throws on read errors
+export async function readData(): Promise<AppData | null> {
+  const { blobs } = await list({ prefix: BLOB_PATHNAME });
+  if (blobs.length === 0) return null;
 
-    // Most recently uploaded (in case there are multiple, take latest)
-    const blob = blobs.sort(
-      (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime(),
-    )[0];
+  const blob = blobs.sort(
+    (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime(),
+  )[0];
 
-    // Use SDK authenticated fetch for private blobs
-    const result = await getBlob(blob.url, { access: 'private' });
-    if (!result) return emptyData();
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  const res = await fetch(blob.url, {
+    cache: 'no-store',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(`Failed to fetch blob: ${res.status}`);
 
-    const raw = await new Response(result.stream).json();
-    return {
-      players: Array.isArray(raw.players) ? raw.players : [],
-      matches: Array.isArray(raw.matches) ? raw.matches : [],
-      history: Array.isArray(raw.history) ? raw.history : [],
-      seeded: !!raw.seeded,
-    };
-  } catch (err) {
-    console.error('readData failed:', err);
-    return emptyData();
-  }
+  const raw = await res.json();
+  return {
+    players: Array.isArray(raw.players) ? raw.players : [],
+    matches: Array.isArray(raw.matches) ? raw.matches : [],
+    history: Array.isArray(raw.history) ? raw.history : [],
+    seeded: !!raw.seeded,
+  };
 }
 
 export async function writeData(data: AppData): Promise<void> {
-  // Cap history to stay within free tier limits
   if (data.history.length > MAX_HISTORY) {
     data.history = data.history.slice(0, MAX_HISTORY);
   }

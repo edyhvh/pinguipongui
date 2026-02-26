@@ -6,8 +6,8 @@ export async function GET() {
   try {
     let data = await readData();
 
-    // Seed on first ever request
-    if (!data.seeded) {
+    // Seed only on the very first request (blob doesn't exist yet)
+    if (data === null) {
       const { players, matches } = generateSeedData();
       data = { players, matches, history: [], seeded: true };
       await writeData(data);

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readData, writeData } from '../../../lib/blob';
+import { readData, writeData, emptyData } from '../../../lib/blob';
 import { withLock } from '../../../lib/lock';
 
 export async function POST(req: NextRequest) {
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     }
 
     await withLock(async () => {
-      const data = await readData();
+      const data = await readData() ?? { players: [], matches: [], history: [], seeded: true };
       const playerIds = new Set(data.players.map((p) => p.id));
 
       for (const e of entries) {
@@ -95,7 +95,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     await withLock(async () => {
-      const data = await readData();
+      const data = await readData() ?? emptyData();
       const match = data.matches.find((m) => m.id === id);
       if (!match) throw Object.assign(new Error('Match not found'), { status: 404 });
 
