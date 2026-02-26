@@ -33,6 +33,20 @@ export interface H2HRecord {
   games: number;
 }
 
+export type HistoryAction = 'add_matches' | 'remove_match' | 'add_player' | 'remove_player' | 'revert';
+
+export interface HistoryEntry {
+  id: string;
+  timestamp: string;
+  action: HistoryAction;
+  description: string;
+  // Payloads for reverting
+  addedMatches?: Match[];   // 'add_matches': delete these on revert
+  removedMatch?: Match;     // 'remove_match': re-add this on revert
+  addedPlayer?: Player;     // 'add_player': delete this on revert
+  removedPlayer?: Player;   // 'remove_player': re-add this on revert
+}
+
 export interface PlayerStatsExtended {
   player: Player;
   wins: number;

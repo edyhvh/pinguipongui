@@ -3,8 +3,28 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getPlayers, addMatchesBulk, seedInitialData } from '../../../lib/storage';
-import type { Player } from '../../../lib/types';
+import { getPlayers, addMatchesBulk, getHistory, revertHistoryEntry, seedInitialData } from '../../../lib/storage';
+import type { Player, HistoryEntry } from '../../../lib/types';
+
+const ACTION_LABELS: Record<string, string> = {
+  add_matches: 'Added',
+  remove_match: 'Removed',
+  add_player: 'Player+',
+  remove_player: 'Player−',
+  revert: 'Reverted',
+};
+
+function formatRelativeTime(isoString: string): string {
+  const diffMs = Date.now() - new Date(isoString).getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return new Date(isoString).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
 
 type Entry = { winnerId: string; loserId: string };
 
@@ -15,6 +35,11 @@ export default function NewMatchPage() {
   const [p2Id, setP2Id] = useState('');
   const [entries, setEntries] = useState<Entry[]>([]);
   const [saving, setSaving] = useState(false);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+
+  function refreshHistory() {
+    setHistory(getHistory());
+  }
 
   useEffect(() => {
     seedInitialData();
@@ -22,6 +47,14 @@ export default function NewMatchPage() {
     setPlayers(p);
     if (p.length >= 1) setP1Id(p[0].id);
     if (p.length >= 2) setP2Id(p[1].id);
+    refreshHistory();
+    const handler = () => refreshHistory();
+    window.addEventListener('pinguipongui_change', handler);
+    window.addEventListener('storage', handler);
+    return () => {
+      window.removeEventListener('pinguipongui_change', handler);
+      window.removeEventListener('storage', handler);
+    };
   }, []);
 
   const p1 = players.find((p) => p.id === p1Id);
@@ -303,6 +336,103 @@ export default function NewMatchPage() {
           )}
         </>
       )}
+
+      {/* ── History log ─────────────────────────────────────────────── */}
+      <div className="divider" style={{ margin: '64px 0 48px' }} />
+
+      <section>
+        <div className="section-header">
+          <span className="section-title">Change Log</span>
+          <span className="label-muted">{history.length} {history.length !== 1 ? 'entries' : 'entry'}</span>
+        </div>
+
+        {history.length === 0 ? (
+          <div style={{ padding: '32px 0', textAlign: 'center' }}>
+            <div className="label-muted">No changes recorded yet</div>
+          </div>
+        ) : (
+          <div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '72px 1fr 80px 80px',
+                gap: '16px',
+                paddingBottom: '8px',
+                borderBottom: '1px solid #000',
+              }}
+            >
+              <div className="label">Type</div>
+              <div className="label">Description</div>
+              <div className="label">When</div>
+              <div />
+            </div>
+
+            {history.map((entry) => (
+              <div
+                key={entry.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '72px 1fr 80px 80px',
+                  gap: '16px',
+                  alignItems: 'center',
+                  padding: '14px 0',
+                  borderBottom: '1px solid #ccc',
+                  opacity: entry.action === 'revert' ? 0.5 : 1,
+                }}
+              >
+                <div>
+                  <span
+                    style={{
+                      fontSize: '9px',
+                      fontWeight: 400,
+                      letterSpacing: '0.15em',
+                      textTransform: 'uppercase',
+                      padding: '3px 6px',
+                      border: '1px solid',
+                      whiteSpace: 'nowrap',
+                      ...(entry.action === 'revert'
+                        ? { borderColor: '#999', color: '#999' }
+                        : entry.action === 'remove_match' || entry.action === 'remove_player'
+                        ? { borderColor: 'var(--orange)', color: 'var(--orange)' }
+                        : { borderColor: '#000', color: '#000' }),
+                    }}
+                  >
+                    {ACTION_LABELS[entry.action] ?? entry.action}
+                  </span>
+                </div>
+
+                <div style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '-0.01em' }}>
+                  {entry.description}
+                </div>
+
+                <div
+                  className="label-muted"
+                  title={new Date(entry.timestamp).toLocaleString('en-GB')}
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  {formatRelativeTime(entry.timestamp)}
+                </div>
+
+                <div>
+                  {entry.action !== 'revert' && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => {
+                        if (!confirm(`Revert "${entry.description}"?`)) return;
+                        revertHistoryEntry(entry.id);
+                      }}
+                      style={{ fontSize: '9px', padding: '8px 12px' }}
+                    >
+                      Revert
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </main>
   );
 }

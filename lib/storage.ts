@@ -1,10 +1,76 @@
 'use client';
 
-import type { Player, Match, PlayerStats, PlayerStatsExtended, H2HRecord } from './types';
+import type { Player, Match, PlayerStats, PlayerStatsExtended, H2HRecord, HistoryEntry } from './types';
 
 const PLAYERS_KEY = 'pinguipongui_players';
 const MATCHES_KEY = 'pinguipongui_matches';
 const SEED_KEY = 'pinguipongui_seeded_v1';
+const HISTORY_KEY = 'pinguipongui_history';
+
+// ─── History helpers ───────────────────────────────────────────────────────────
+
+export function getHistory(): HistoryEntry[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const data = localStorage.getItem(HISTORY_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(entries: HistoryEntry[]): void {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(entries));
+}
+
+function logHistory(entry: Omit<HistoryEntry, 'id' | 'timestamp'>): void {
+  const newEntry: HistoryEntry = {
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    ...entry,
+  };
+  saveHistory([newEntry, ...getHistory()]);
+}
+
+function dispatchChange(): void {
+  window.dispatchEvent(new CustomEvent('pinguipongui_change'));
+}
+
+export function revertHistoryEntry(entryId: string): void {
+  const history = getHistory();
+  const entry = history.find((e) => e.id === entryId);
+  if (!entry) return;
+
+  switch (entry.action) {
+    case 'add_matches': {
+      const ids = new Set(entry.addedMatches!.map((m) => m.id));
+      saveMatches(getMatches().filter((m) => !ids.has(m.id)));
+      break;
+    }
+    case 'remove_match': {
+      saveMatches([entry.removedMatch!, ...getMatches()]);
+      break;
+    }
+    case 'add_player': {
+      savePlayers(getPlayers().filter((p) => p.id !== entry.addedPlayer!.id));
+      break;
+    }
+    case 'remove_player': {
+      savePlayers([...getPlayers(), entry.removedPlayer!]);
+      break;
+    }
+  }
+
+  // Replace original entry with a revert entry
+  const revertEntry: HistoryEntry = {
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    action: 'revert',
+    description: `Reverted: ${entry.description}`,
+  };
+  saveHistory([revertEntry, ...history.filter((e) => e.id !== entryId)]);
+  dispatchChange();
+}
 
 // ─── Seed data ────────────────────────────────────────────────────────────────
 
@@ -109,11 +175,18 @@ export function addPlayer(name: string): Player {
     createdAt: new Date().toISOString(),
   };
   savePlayers([...players, player]);
+  logHistory({ action: 'add_player', description: `Added player: ${player.name}`, addedPlayer: player });
+  dispatchChange();
   return player;
 }
 
 export function removePlayer(id: string): void {
+  const player = getPlayers().find((p) => p.id === id);
   savePlayers(getPlayers().filter((p) => p.id !== id));
+  if (player) {
+    logHistory({ action: 'remove_player', description: `Removed player: ${player.name}`, removedPlayer: player });
+    dispatchChange();
+  }
 }
 
 export function getMatches(): Match[] {
@@ -157,15 +230,35 @@ export function addMatchesBulk(entries: Array<{ winnerId: string; loserId: strin
     player2Score: 0,
     winnerId: e.winnerId,
     loserId: e.loserId,
-    // space them 1s apart so order is preserved
     playedAt: new Date(base + i * 1000).toISOString(),
   }));
-  // newest first
   saveMatches([...newMatches.reverse(), ...getMatches()]);
+
+  // Build description from player names
+  const playerMap = new Map(getPlayers().map((p) => [p.id, p.name]));
+  const tally = new Map<string, { winner: string; loser: string; count: number }>();
+  for (const e of entries) {
+    const key = `${e.winnerId}>${e.loserId}`;
+    const cur = tally.get(key);
+    if (cur) cur.count++;
+    else tally.set(key, { winner: playerMap.get(e.winnerId) ?? '?', loser: playerMap.get(e.loserId) ?? '?', count: 1 });
+  }
+  const parts = Array.from(tally.values()).map((t) => `${t.winner} beat ${t.loser}${t.count > 1 ? ` ×${t.count}` : ''}`);
+  const description = `Added ${entries.length} match${entries.length !== 1 ? 'es' : ''}: ${parts.join(', ')}`;
+  logHistory({ action: 'add_matches', description, addedMatches: newMatches });
+  dispatchChange();
 }
 
 export function removeMatch(id: string): void {
+  const match = getMatches().find((m) => m.id === id);
   saveMatches(getMatches().filter((m) => m.id !== id));
+  if (match) {
+    const playerMap = new Map(getPlayers().map((p) => [p.id, p.name]));
+    const winner = playerMap.get(match.winnerId) ?? '?';
+    const loser = playerMap.get(match.loserId) ?? '?';
+    logHistory({ action: 'remove_match', description: `Removed match: ${winner} beat ${loser}`, removedMatch: match });
+    dispatchChange();
+  }
 }
 
 export function getPlayerStats(players: Player[], matches: Match[]): PlayerStats[] {
