@@ -14,16 +14,14 @@ const ACTION_LABELS: Record<string, string> = {
   revert: 'Reverted',
 };
 
-function formatRelativeTime(isoString: string): string {
-  const diffMs = Date.now() - new Date(isoString).getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return new Date(isoString).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+function formatTimestamp(isoString: string): string {
+  return new Date(isoString).toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 type Entry = { winnerId: string; loserId: string };
@@ -355,7 +353,7 @@ export default function NewMatchPage() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: '72px 1fr 80px 80px',
+                gridTemplateColumns: '72px 1fr 140px 80px',
                 gap: '16px',
                 paddingBottom: '8px',
                 borderBottom: '1px solid #000',
@@ -363,7 +361,7 @@ export default function NewMatchPage() {
             >
               <div className="label">Type</div>
               <div className="label">Description</div>
-              <div className="label">When</div>
+              <div className="label">Date & Time</div>
               <div />
             </div>
 
@@ -372,7 +370,7 @@ export default function NewMatchPage() {
                 key={entry.id}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '72px 1fr 80px 80px',
+                  gridTemplateColumns: '72px 1fr 140px 80px',
                   gap: '16px',
                   alignItems: 'center',
                   padding: '14px 0',
@@ -405,12 +403,8 @@ export default function NewMatchPage() {
                   {entry.description}
                 </div>
 
-                <div
-                  className="label-muted"
-                  title={new Date(entry.timestamp).toLocaleString('en-GB')}
-                  style={{ whiteSpace: 'nowrap' }}
-                >
-                  {formatRelativeTime(entry.timestamp)}
+                <div className="label-muted" style={{ whiteSpace: 'nowrap' }}>
+                  {formatTimestamp(entry.timestamp)}
                 </div>
 
                 <div>
