@@ -1,5 +1,5 @@
 // Server-only — no 'use client'
-import { put, list } from '@vercel/blob';
+import { put, list, get as getBlob } from '@vercel/blob';
 import type { Player, Match, HistoryEntry } from './types';
 
 export interface AppData {
@@ -26,10 +26,11 @@ export async function readData(): Promise<AppData> {
       (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime(),
     )[0];
 
-    const res = await fetch(blob.url, { cache: 'no-store' });
-    if (!res.ok) return emptyData();
+    // Use SDK authenticated fetch for private blobs
+    const result = await getBlob(blob.url, { access: 'private' });
+    if (!result) return emptyData();
 
-    const raw = await res.json();
+    const raw = await new Response(result.stream).json();
     return {
       players: Array.isArray(raw.players) ? raw.players : [],
       matches: Array.isArray(raw.matches) ? raw.matches : [],
