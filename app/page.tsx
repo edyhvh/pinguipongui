@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getPlayers, getMatches, getPlayerStatsExtended, seedInitialData } from '../lib/storage';
+import { getAllData, getPlayerStatsExtended } from '../lib/storage';
 import type { Player, Match, PlayerStatsExtended } from '../lib/types';
 
 function formatPct(value: number): string {
@@ -237,13 +237,20 @@ export default function HomePage() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    seedInitialData();
-    const p = getPlayers();
-    const m = getMatches();
-    setPlayers(p);
-    setMatches(m);
-    setStats(getPlayerStatsExtended(p, m));
-    setMounted(true);
+    let cancelled = false;
+    async function load() {
+      try {
+        const data = await getAllData();
+        if (cancelled) return;
+        setPlayers(data.players);
+        setMatches(data.matches);
+        setStats(getPlayerStatsExtended(data.players, data.matches));
+        setMounted(true);
+      } catch {}
+    }
+    load();
+    const interval = setInterval(load, 10000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
   const year = new Date().getFullYear();

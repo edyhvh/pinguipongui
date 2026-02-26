@@ -2,264 +2,74 @@
 
 import type { Player, Match, PlayerStats, PlayerStatsExtended, H2HRecord, HistoryEntry } from './types';
 
-const PLAYERS_KEY = 'pinguipongui_players';
-const MATCHES_KEY = 'pinguipongui_matches';
-const SEED_KEY = 'pinguipongui_seeded_v1';
-const HISTORY_KEY = 'pinguipongui_history';
+// ─── API callers (client → API routes → Vercel Blob) ──────────────────────────
 
-// ─── History helpers ───────────────────────────────────────────────────────────
+export async function getAllData(): Promise<{ players: Player[]; matches: Match[]; history: HistoryEntry[] }> {
+  const res = await fetch('/api/data', { cache: 'no-store' });
+  if (!res.ok) throw new Error('Failed to load data');
+  return res.json();
+}
 
-export function getHistory(): HistoryEntry[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const data = localStorage.getItem(HISTORY_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
+export async function addPlayer(name: string): Promise<Player> {
+  const res = await fetch('/api/players', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? 'Failed to add player');
+  return data;
+}
+
+export async function removePlayer(id: string): Promise<void> {
+  const res = await fetch('/api/players', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error ?? 'Failed to remove player');
   }
 }
 
-function saveHistory(entries: HistoryEntry[]): void {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(entries));
-}
-
-function logHistory(entry: Omit<HistoryEntry, 'id' | 'timestamp'>): void {
-  const newEntry: HistoryEntry = {
-    id: crypto.randomUUID(),
-    timestamp: new Date().toISOString(),
-    ...entry,
-  };
-  saveHistory([newEntry, ...getHistory()]);
-}
-
-function dispatchChange(): void {
-  window.dispatchEvent(new CustomEvent('pinguipongui_change'));
-}
-
-export function revertHistoryEntry(entryId: string): void {
-  const history = getHistory();
-  const entry = history.find((e) => e.id === entryId);
-  if (!entry) return;
-
-  switch (entry.action) {
-    case 'add_matches': {
-      const ids = new Set(entry.addedMatches!.map((m) => m.id));
-      saveMatches(getMatches().filter((m) => !ids.has(m.id)));
-      break;
-    }
-    case 'remove_match': {
-      saveMatches([entry.removedMatch!, ...getMatches()]);
-      break;
-    }
-    case 'add_player': {
-      savePlayers(getPlayers().filter((p) => p.id !== entry.addedPlayer!.id));
-      break;
-    }
-    case 'remove_player': {
-      savePlayers([...getPlayers(), entry.removedPlayer!]);
-      break;
-    }
-  }
-
-  // Replace original entry with a revert entry
-  const revertEntry: HistoryEntry = {
-    id: crypto.randomUUID(),
-    timestamp: new Date().toISOString(),
-    action: 'revert',
-    description: `Reverted: ${entry.description}`,
-  };
-  saveHistory([revertEntry, ...history.filter((e) => e.id !== entryId)]);
-  dispatchChange();
-}
-
-// ─── Seed data ────────────────────────────────────────────────────────────────
-
-const SEED_PLAYERS: Player[] = [
-  { id: 'p-mc', name: 'MC', createdAt: '2024-01-01T00:00:00Z' },
-  { id: 'p-jv', name: 'JV', createdAt: '2024-01-01T00:00:00Z' },
-  { id: 'p-cc', name: 'CC', createdAt: '2024-01-01T00:00:00Z' },
-  { id: 'p-dk', name: 'DK', createdAt: '2024-01-01T00:00:00Z' },
-  { id: 'p-cs', name: 'CS', createdAt: '2024-01-01T00:00:00Z' },
-  { id: 'p-jm', name: 'JM', createdAt: '2024-01-01T00:00:00Z' },
-  { id: 'p-fc', name: 'FC', createdAt: '2024-01-01T00:00:00Z' },
-  { id: 'p-cr', name: 'CR', createdAt: '2024-01-01T00:00:00Z' },
-  { id: 'p-vm', name: 'VM', createdAt: '2024-01-01T00:00:00Z' },
-  { id: 'p-mr', name: 'MR', createdAt: '2024-01-01T00:00:00Z' },
-  { id: 'p-lm', name: 'LM', createdAt: '2024-01-01T00:00:00Z' },
-];
-
-// [player1Id, player2Id, p1wins, p2wins]
-const SEED_H2H: [string, string, number, number][] = [
-  ['p-mc', 'p-jv', 9, 4],   // MC won 9, JV won 4, total 13 games
-  ['p-mc', 'p-cc', 0, 2],   // MC won 0, CC won 2, total 2 games
-  ['p-mc', 'p-cs', 2, 0],   // MC won 2, CS won 0, total 2 games
-  ['p-mc', 'p-jm', 3, 0],   // MC won 3, JM won 0, total 3 games
-  ['p-mc', 'p-fc', 4, 1],   // MC won 4, FC won 1, total 5 games
-  ['p-jv', 'p-cc', 0, 3],   // JV won 0, CC won 3, total 3 games
-  ['p-jv', 'p-cs', 5, 2],   // JV won 5, CS won 2, total 7 games
-  ['p-jv', 'p-jm', 5, 1],   // JV won 5, JM won 1, total 6 games
-  ['p-jv', 'p-fc', 6, 6],   // JV won 6, FC won 6, total 12 games
-  ['p-cs', 'p-jm', 1, 1],   // CS won 1, JM won 1, total 2 games
-  ['p-cs', 'p-cr', 2, 0],   // CS won 2, CR won 0, total 2 games
-  ['p-jm', 'p-fc', 2, 1],   // JM won 2, FC won 1, total 3 games
-];
-
-// Realistic-looking loser scores (all < 11)
-const LOSER_SCORES = [9, 7, 8, 6, 9, 8, 7, 9, 6, 8, 7, 9, 8, 6, 9, 7];
-
-export function seedInitialData(): void {
-  if (typeof window === 'undefined') return;
-  if (localStorage.getItem(SEED_KEY)) return;
-
-  const matches: Match[] = [];
-  const startMs = new Date('2024-07-01').getTime();
-  const dayMs = 24 * 60 * 60 * 1000;
-  let dayOffset = 0;
-
-  for (const [p1, p2, p1wins, p2wins] of SEED_H2H) {
-    // Interleave wins so history looks natural
-    const sequence: string[] = [];
-    let r1 = p1wins, r2 = p2wins;
-    while (r1 > 0 || r2 > 0) {
-      if (r1 > 0) { sequence.push(p1); r1--; }
-      if (r2 > 0) { sequence.push(p2); r2--; }
-    }
-
-    for (const winnerId of sequence) {
-      const loserId = winnerId === p1 ? p2 : p1;
-      const loserScore = LOSER_SCORES[matches.length % LOSER_SCORES.length];
-      matches.push({
-        id: `seed-${matches.length}`,
-        player1Id: winnerId,
-        player2Id: loserId,
-        player1Score: 11,
-        player2Score: loserScore,
-        winnerId,
-        loserId,
-        playedAt: new Date(startMs + dayOffset * dayMs).toISOString(),
-      });
-      dayOffset += 2 + (matches.length % 3); // 2–4 days between matches
-    }
-  }
-
-  // Newest first
-  matches.sort((a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime());
-
-  localStorage.setItem(PLAYERS_KEY, JSON.stringify(SEED_PLAYERS));
-  localStorage.setItem(MATCHES_KEY, JSON.stringify(matches));
-  localStorage.setItem(SEED_KEY, '1');
-}
-
-export function getPlayers(): Player[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const data = localStorage.getItem(PLAYERS_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
+export async function addMatchesBulk(entries: Array<{ winnerId: string; loserId: string }>): Promise<void> {
+  const res = await fetch('/api/matches', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ entries }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error ?? 'Failed to add matches');
   }
 }
 
-function savePlayers(players: Player[]): void {
-  localStorage.setItem(PLAYERS_KEY, JSON.stringify(players));
-}
-
-export function addPlayer(name: string): Player {
-  const players = getPlayers();
-  const trimmed = name.trim().toUpperCase();
-  if (!trimmed) throw new Error('Name required');
-  if (players.some((p) => p.name === trimmed)) throw new Error('Player already exists');
-  const player: Player = {
-    id: crypto.randomUUID(),
-    name: trimmed,
-    createdAt: new Date().toISOString(),
-  };
-  savePlayers([...players, player]);
-  logHistory({ action: 'add_player', description: `Added player: ${player.name}`, addedPlayer: player });
-  dispatchChange();
-  return player;
-}
-
-export function removePlayer(id: string): void {
-  const player = getPlayers().find((p) => p.id === id);
-  savePlayers(getPlayers().filter((p) => p.id !== id));
-  if (player) {
-    logHistory({ action: 'remove_player', description: `Removed player: ${player.name}`, removedPlayer: player });
-    dispatchChange();
+export async function removeMatch(id: string): Promise<void> {
+  const res = await fetch('/api/matches', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error ?? 'Failed to remove match');
   }
 }
 
-export function getMatches(): Match[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const data = localStorage.getItem(MATCHES_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
+export async function revertHistoryEntry(entryId: string): Promise<void> {
+  const res = await fetch('/api/history/revert', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: entryId }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error ?? 'Failed to revert');
   }
 }
 
-function saveMatches(matches: Match[]): void {
-  localStorage.setItem(MATCHES_KEY, JSON.stringify(matches));
-}
-
-export function addMatch(winnerId: string, loserId: string): Match {
-  if (winnerId === loserId) throw new Error('Players must be different');
-  const match: Match = {
-    id: crypto.randomUUID(),
-    player1Id: winnerId,
-    player2Id: loserId,
-    player1Score: 1,
-    player2Score: 0,
-    winnerId,
-    loserId,
-    playedAt: new Date().toISOString(),
-  };
-  saveMatches([match, ...getMatches()]);
-  return match;
-}
-
-export function addMatchesBulk(entries: Array<{ winnerId: string; loserId: string }>): void {
-  if (entries.length === 0) return;
-  const base = Date.now();
-  const newMatches: Match[] = entries.map((e, i) => ({
-    id: crypto.randomUUID(),
-    player1Id: e.winnerId,
-    player2Id: e.loserId,
-    player1Score: 1,
-    player2Score: 0,
-    winnerId: e.winnerId,
-    loserId: e.loserId,
-    playedAt: new Date(base + i * 1000).toISOString(),
-  }));
-  saveMatches([...newMatches.reverse(), ...getMatches()]);
-
-  // Build description from player names
-  const playerMap = new Map(getPlayers().map((p) => [p.id, p.name]));
-  const tally = new Map<string, { winner: string; loser: string; count: number }>();
-  for (const e of entries) {
-    const key = `${e.winnerId}>${e.loserId}`;
-    const cur = tally.get(key);
-    if (cur) cur.count++;
-    else tally.set(key, { winner: playerMap.get(e.winnerId) ?? '?', loser: playerMap.get(e.loserId) ?? '?', count: 1 });
-  }
-  const parts = Array.from(tally.values()).map((t) => `${t.winner} beat ${t.loser}${t.count > 1 ? ` ×${t.count}` : ''}`);
-  const description = `Added ${entries.length} match${entries.length !== 1 ? 'es' : ''}: ${parts.join(', ')}`;
-  logHistory({ action: 'add_matches', description, addedMatches: newMatches });
-  dispatchChange();
-}
-
-export function removeMatch(id: string): void {
-  const match = getMatches().find((m) => m.id === id);
-  saveMatches(getMatches().filter((m) => m.id !== id));
-  if (match) {
-    const playerMap = new Map(getPlayers().map((p) => [p.id, p.name]));
-    const winner = playerMap.get(match.winnerId) ?? '?';
-    const loser = playerMap.get(match.loserId) ?? '?';
-    logHistory({ action: 'remove_match', description: `Removed match: ${winner} beat ${loser}`, removedMatch: match });
-    dispatchChange();
-  }
-}
+// ─── Pure computation (no I/O) ────────────────────────────────────────────────
 
 export function getPlayerStats(players: Player[], matches: Match[]): PlayerStats[] {
   return players
@@ -297,9 +107,7 @@ export function getPlayerStats(players: Player[], matches: Match[]): PlayerStats
     });
 }
 
-// Extended stats with rating formula
 export function getPlayerStatsExtended(players: Player[], matches: Match[]): PlayerStatsExtended[] {
-  // Find active players (those with at least 1 game)
   const activePlayers = new Set<string>();
   for (const m of matches) {
     activePlayers.add(m.player1Id);
@@ -311,39 +119,25 @@ export function getPlayerStatsExtended(players: Player[], matches: Match[]): Pla
     const playerMatches = matches.filter(
       (m) => m.player1Id === player.id || m.player2Id === player.id,
     );
-    
     const wins = playerMatches.filter((m) => m.winnerId === player.id).length;
     const losses = playerMatches.filter((m) => m.loserId === player.id).length;
     const totalGames = playerMatches.length;
-    
-    // Calculate win rate
     const winRate = totalGames > 0 ? wins / totalGames : 0;
-    
-    // Calculate confidence: games / (games + 8)
     const confidence = totalGames > 0 ? totalGames / (totalGames + 8) : 0;
-    
-    // Calculate distribution (HHI inverted)
-    // First, count games per opponent
+
     const gamesPerOpponent = new Map<string, number>();
     const h2h = new Map<string, H2HRecord>();
-    
+
     for (const m of playerMatches) {
       const opponentId = m.player1Id === player.id ? m.player2Id : m.player1Id;
-      const current = gamesPerOpponent.get(opponentId) || 0;
-      gamesPerOpponent.set(opponentId, current + 1);
-      
-      // Track head-to-head
+      gamesPerOpponent.set(opponentId, (gamesPerOpponent.get(opponentId) || 0) + 1);
       const h2hRecord = h2h.get(opponentId) || { opponentId, wins: 0, losses: 0, games: 0 };
-      if (m.winnerId === player.id) {
-        h2hRecord.wins++;
-      } else {
-        h2hRecord.losses++;
-      }
+      if (m.winnerId === player.id) h2hRecord.wins++;
+      else h2hRecord.losses++;
       h2hRecord.games++;
       h2h.set(opponentId, h2hRecord);
     }
-    
-    // Calculate distribution: 1 - sum((games_vs_opponent / totalGames)^2)
+
     let distribution = 0;
     if (totalGames > 0) {
       let sumSquares = 0;
@@ -353,11 +147,10 @@ export function getPlayerStatsExtended(players: Player[], matches: Match[]): Pla
       }
       distribution = 1 - sumSquares;
     }
-    
-    // Calculate rating: WinRate × ((Confidence × 0.8) + (Distribution × 0.2)) × 100
-    const multiplier = (confidence * 0.8) + (distribution * 0.2);
+
+    const multiplier = confidence * 0.8 + distribution * 0.2;
     const rating = winRate * multiplier * 100;
-    
+
     return {
       player,
       wins,
@@ -373,25 +166,16 @@ export function getPlayerStatsExtended(players: Player[], matches: Match[]): Pla
       h2h,
     };
   });
-  
-  // Sort by rating (descending) with tiebreakers
+
   return stats.sort((a, b) => {
-    // First tiebreaker: rating
     if (b.rating !== a.rating) return b.rating - a.rating;
-    
-    // Both have games - check head-to-head
     if (a.totalGames > 0 && b.totalGames > 0) {
       const aH2h = a.h2h.get(b.player.id);
       const bH2h = b.h2h.get(a.player.id);
-      
-      if (aH2h && bH2h) {
-        if (aH2h.wins !== bH2h.wins) {
-          return bH2h.wins - aH2h.wins; // More wins against opponent ranks higher
-        }
+      if (aH2h && bH2h && aH2h.wins !== bH2h.wins) {
+        return bH2h.wins - aH2h.wins;
       }
     }
-    
-    // Second tiebreaker: total games
     return b.totalGames - a.totalGames;
   });
 }
