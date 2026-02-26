@@ -3,7 +3,7 @@ import './globals.css';
 import Nav from './Nav';
 
 export const metadata: Metadata = {
-  title: 'Pinguipongui — Table Tennis Tracker',
+  title: 'Pinguipongui — Ugly Tennis Tracker',
   description: 'Track ping pong matches, players, and standings.',
 };
 

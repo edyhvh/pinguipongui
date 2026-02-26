@@ -29,6 +29,14 @@ export default function Nav() {
               Players
             </Link>
           </li>
+          <li>
+            <Link
+              href="/ranking"
+              className={`nav-link${pathname === '/ranking' ? ' active' : ''}`}
+            >
+              Info
+            </Link>
+          </li>
         </ul>
       </div>
     </nav>

@@ -2,59 +2,49 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getPlayers, getMatches, getPlayerStats, seedInitialData } from '../lib/storage';
-import type { Player, Match, PlayerStats } from '../lib/types';
+import { getPlayers, getMatches, getPlayerStatsExtended, seedInitialData } from '../lib/storage';
+import type { Player, Match, PlayerStatsExtended } from '../lib/types';
 
-const HATCH_BLACK =
-  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6'%3E%3Cline x1='3' y1='0' x2='3' y2='6' stroke='%23000000' stroke-width='1'/%3E%3C/svg%3E\")";
-const HATCH_ORANGE =
-  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6'%3E%3Cline x1='3' y1='0' x2='3' y2='6' stroke='%23ff4500' stroke-width='1'/%3E%3C/svg%3E\")";
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-  });
+function formatPct(value: number): string {
+  return `${Math.round(value * 100)}%`;
 }
 
-function WinBar({ rate, isFirst }: { rate: number; isFirst: boolean }) {
-  return (
-    <div className="win-bar-track">
-      <div
-        className="win-bar-fill"
-        style={{
-          width: `${Math.round(rate * 100)}%`,
-          backgroundImage: isFirst ? HATCH_ORANGE : HATCH_BLACK,
-          backgroundSize: '6px 6px',
-        }}
-      />
-    </div>
-  );
+function formatNum(value: number): string {
+  return value.toFixed(2);
 }
 
 function StandingsRow({
   stat,
   rank,
-  players,
 }: {
-  stat: PlayerStats;
-  rank: number;
-  players: Player[];
+  stat: PlayerStatsExtended;
+  rank: number | null;
 }) {
-  const isFirst = rank === 1;
-  const winPct = Math.round(stat.winRate * 100);
+  const isFirst = rank !== null && rank === 1;
+  const hasGames = stat.totalGames > 0;
+
+  // For players with 0 games, show "—" for rank, Win%, Confidence, Distribution
+  const displayRank = rank !== null ? rank : '—';
+  const displayWinPct = hasGames ? formatPct(stat.winRate) : '—';
+  const displayConfidence = hasGames ? formatPct(stat.confidence) : '—';
+  const displayDistribution = hasGames ? formatPct(stat.distribution) : '—';
+  const displayRating = hasGames ? formatNum(stat.rating) : '—';
+  const displayOpponents = hasGames ? `${stat.opponents}/${stat.activePlayers}` : '—';
 
   return (
-    <div className="standings-row">
+    <div className="standings-row" style={{ 
+      opacity: hasGames ? 1 : 0.5,
+      backgroundColor: hasGames ? 'transparent' : '#f5f5f5'
+    }}>
       {/* Rank */}
       <div
         className="rank-number"
         style={{ color: isFirst ? '#ff4500' : '#000' }}
       >
-        {rank}
+        {displayRank}
       </div>
 
-      {/* Player info */}
+      {/* Player */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {isFirst && (
@@ -69,10 +59,36 @@ function StandingsRow({
           )}
           <div className="player-name-large">{stat.player.name}</div>
         </div>
-        <div className="label-muted" style={{ marginTop: '4px' }}>
-          {stat.totalMatches} {stat.totalMatches === 1 ? 'match' : 'matches'} ·{' '}
-          {stat.pointsFor}pts for / {stat.pointsAgainst}pts against
+      </div>
+
+      {/* Rating */}
+      <div style={{ textAlign: 'center', backgroundColor: 'rgba(0,0,0,0.06)', padding: '12px 0' }}>
+        <div
+          className="stat-number"
+          style={{ color: isFirst ? '#ff4500' : '#000', fontWeight: 900 }}
+        >
+          {displayRating}
         </div>
+      </div>
+
+      {/* Win% */}
+      <div style={{ textAlign: 'center' }}>
+        <div
+          className="stat-number"
+          style={{ color: isFirst ? '#ff4500' : '#000' }}
+        >
+          {displayWinPct}
+        </div>
+      </div>
+
+      {/* Confidence */}
+      <div style={{ textAlign: 'center' }}>
+        <div className="stat-number">{displayConfidence}</div>
+      </div>
+
+      {/* Distribution */}
+      <div style={{ textAlign: 'center' }}>
+        <div className="stat-number">{displayDistribution}</div>
       </div>
 
       {/* Wins */}
@@ -83,101 +99,31 @@ function StandingsRow({
         >
           {stat.wins}
         </div>
-        <div className="label-muted">W</div>
       </div>
 
       {/* Losses */}
       <div style={{ textAlign: 'center' }}>
         <div className="stat-number">{stat.losses}</div>
-        <div className="label-muted">L</div>
       </div>
 
-      {/* Win bar */}
-      <div className="standings-bar-col">
-        <div
-          className="label"
-          style={{ marginBottom: '4px', color: isFirst ? '#ff4500' : '#000' }}
-        >
-          {winPct}%
-        </div>
-        <WinBar rate={stat.winRate} isFirst={isFirst} />
+      {/* Games */}
+      <div style={{ textAlign: 'center' }}>
+        <div className="stat-number">{stat.totalGames}</div>
+      </div>
+
+      {/* Opponents */}
+      <div style={{ textAlign: 'center' }}>
+        <div className="stat-number">{displayOpponents}</div>
       </div>
     </div>
   );
 }
 
-function MatchRow({
-  match,
-  players,
-}: {
-  match: Match;
-  players: Player[];
-}) {
-  const p1 = players.find((p) => p.id === match.player1Id);
-  const p2 = players.find((p) => p.id === match.player2Id);
-  if (!p1 || !p2) return null;
-
-  const p1Won = match.winnerId === match.player1Id;
-
-  return (
-    <div className="match-row">
-      {/* Date */}
-      <div className="label-muted match-date-col">{formatDate(match.playedAt)}</div>
-
-      {/* Players */}
-      <div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
-          <span
-            style={{
-              fontSize: 'clamp(14px, 2.5vw, 18px)',
-              fontWeight: p1Won ? 900 : 400,
-              letterSpacing: '-0.01em',
-              textTransform: 'uppercase',
-            }}
-          >
-            {p1.name}
-          </span>
-          <span className="vs-text">vs</span>
-          <span
-            style={{
-              fontSize: 'clamp(14px, 2.5vw, 18px)',
-              fontWeight: !p1Won ? 900 : 400,
-              letterSpacing: '-0.01em',
-              textTransform: 'uppercase',
-            }}
-          >
-            {p2.name}
-          </span>
-        </div>
-        <div className="label-muted" style={{ marginTop: '2px' }}>
-          {formatDate(match.playedAt)}
-        </div>
-      </div>
-
-      {/* Score */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0' }}>
-        <span
-          className="match-score"
-          style={{ color: p1Won ? '#000' : '#999' }}
-        >
-          {match.player1Score}
-        </span>
-        <span className="match-score-separator">—</span>
-        <span
-          className="match-score"
-          style={{ color: !p1Won ? '#000' : '#999' }}
-        >
-          {match.player2Score}
-        </span>
-      </div>
-    </div>
-  );
-}
 
 export default function HomePage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
-  const [stats, setStats] = useState<PlayerStats[]>([]);
+  const [stats, setStats] = useState<PlayerStatsExtended[]>([]);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -186,11 +132,18 @@ export default function HomePage() {
     const m = getMatches();
     setPlayers(p);
     setMatches(m);
-    setStats(getPlayerStats(p, m));
+    setStats(getPlayerStatsExtended(p, m));
     setMounted(true);
   }, []);
 
   const year = new Date().getFullYear();
+
+  // Separate players with games from those without
+  const playersWithGames = stats.filter(s => s.totalGames > 0);
+  const playersWithoutGames = stats.filter(s => s.totalGames === 0);
+  
+  // Combine: ranked players first, then unranked
+  const rankedStats = [...playersWithGames, ...playersWithoutGames];
 
   return (
     <main className="page">
@@ -207,7 +160,7 @@ export default function HomePage() {
         >
           <div>
             <div className="page-title">
-              Table<br />Tennis
+              Ugly<br />Pong
             </div>
             <div className="page-subtitle">Tracker · Season {year}</div>
           </div>
@@ -223,12 +176,12 @@ export default function HomePage() {
             >
               {mounted ? matches.length : '—'}
             </div>
-            <div className="label-muted">Matches Played</div>
+            <div className="label-muted">Games Played</div>
           </div>
         </div>
       </div>
 
-      {/* Standings */}
+      {/* Standings Table */}
       <section style={{ marginBottom: '64px' }}>
         <div className="section-header">
           <span className="section-title">Standings</span>
@@ -252,62 +205,52 @@ export default function HomePage() {
           </div>
         ) : (
           <>
-            {/* Table header */}
+            {/* Table header - 10 columns */}
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: '80px 1fr 60px 60px 160px',
-                gap: '16px',
+                gridTemplateColumns: '50px 1fr 80px 70px 70px 70px 50px 50px 70px 70px',
+                gap: '8px',
                 paddingBottom: '8px',
                 borderBottom: '1px solid #000',
+                fontSize: '11px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
               }}
             >
               <div className="label">#</div>
               <div className="label">Player</div>
+              <div className="label" style={{ textAlign: 'center', backgroundColor: 'rgba(0,0,0,0.06)', padding: '4px 0' }}>Rating</div>
+              <div className="label" style={{ textAlign: 'center' }}>Win%</div>
+              <div className="label" style={{ textAlign: 'center' }}>Conf.</div>
+              <div className="label" style={{ textAlign: 'center' }}>Dist.</div>
               <div className="label" style={{ textAlign: 'center' }}>W</div>
               <div className="label" style={{ textAlign: 'center' }}>L</div>
-              <div className="label standings-bar-col">Win %</div>
+              <div className="label" style={{ textAlign: 'center' }}>Games</div>
+              <div className="label" style={{ textAlign: 'center' }}>Opp.</div>
             </div>
 
-            {stats.map((stat, i) => (
+            {/* Ranked players (with games) */}
+            {playersWithGames.map((stat, i) => (
               <StandingsRow
                 key={stat.player.id}
                 stat={stat}
                 rank={i + 1}
-                players={players}
+              />
+            ))}
+
+            {/* Unranked players (0 games) - show with rank as "—" */}
+            {playersWithoutGames.map((stat) => (
+              <StandingsRow
+                key={stat.player.id}
+                stat={stat}
+                rank={null}
               />
             ))}
           </>
         )}
       </section>
 
-      {/* Recent Matches */}
-      <section>
-        <div className="section-header">
-          <span className="section-title">Recent Matches</span>
-          <Link href="/match/new" className="btn-primary" style={{ padding: '8px 16px' }}>
-            + New Match
-          </Link>
-        </div>
-
-        {!mounted ? null : matches.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-number">—</div>
-            <div className="label-muted" style={{ marginTop: '16px' }}>
-              No matches yet —{' '}
-              <Link href="/match/new" style={{ color: '#000', textDecoration: 'underline' }}>
-                record a match
-              </Link>
-            </div>
-          </div>
-        ) : (
-          <div>
-            {matches.slice(0, 20).map((match) => (
-              <MatchRow key={match.id} match={match} players={players} />
-            ))}
-          </div>
-        )}
-      </section>
     </main>
   );
 }

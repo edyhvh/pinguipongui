@@ -1,6 +1,6 @@
 'use client';
 
-import type { Player, Match, PlayerStats } from './types';
+import type { Player, Match, PlayerStats, PlayerStatsExtended, H2HRecord } from './types';
 
 const PLAYERS_KEY = 'pinguipongui_players';
 const MATCHES_KEY = 'pinguipongui_matches';
@@ -24,18 +24,18 @@ const SEED_PLAYERS: Player[] = [
 
 // [player1Id, player2Id, p1wins, p2wins]
 const SEED_H2H: [string, string, number, number][] = [
-  ['p-mc', 'p-jv',  9, 4],
-  ['p-mc', 'p-cc',  0, 2],
-  ['p-mc', 'p-cs',  2, 0],
-  ['p-mc', 'p-jm',  3, 0],
-  ['p-mc', 'p-fc',  4, 1],
-  ['p-jv', 'p-cc',  0, 3],
-  ['p-jv', 'p-cs',  5, 2],
-  ['p-jv', 'p-jm',  5, 1],
-  ['p-jv', 'p-fc',  6, 6],
-  ['p-cs', 'p-jm',  1, 1],
-  ['p-cs', 'p-cr',  2, 0],
-  ['p-jm', 'p-fc',  2, 1],
+  ['p-mc', 'p-jv', 9, 4],   // MC won 9, JV won 4, total 13 games
+  ['p-mc', 'p-cc', 0, 2],   // MC won 0, CC won 2, total 2 games
+  ['p-mc', 'p-cs', 2, 0],   // MC won 2, CS won 0, total 2 games
+  ['p-mc', 'p-jm', 3, 0],   // MC won 3, JM won 0, total 3 games
+  ['p-mc', 'p-fc', 4, 1],   // MC won 4, FC won 1, total 5 games
+  ['p-jv', 'p-cc', 0, 3],   // JV won 0, CC won 3, total 3 games
+  ['p-jv', 'p-cs', 5, 2],   // JV won 5, CS won 2, total 7 games
+  ['p-jv', 'p-jm', 5, 1],   // JV won 5, JM won 1, total 6 games
+  ['p-jv', 'p-fc', 6, 6],   // JV won 6, FC won 6, total 12 games
+  ['p-cs', 'p-jm', 1, 1],   // CS won 1, JM won 1, total 2 games
+  ['p-cs', 'p-cr', 2, 0],   // CS won 2, CR won 0, total 2 games
+  ['p-jm', 'p-fc', 2, 1],   // JM won 2, FC won 1, total 3 games
 ];
 
 // Realistic-looking loser scores (all < 11)
@@ -192,4 +192,103 @@ export function getPlayerStats(players: Player[], matches: Match[]): PlayerStats
       if (b.winRate !== a.winRate) return b.winRate - a.winRate;
       return b.totalMatches - a.totalMatches;
     });
+}
+
+// Extended stats with rating formula
+export function getPlayerStatsExtended(players: Player[], matches: Match[]): PlayerStatsExtended[] {
+  // Find active players (those with at least 1 game)
+  const activePlayers = new Set<string>();
+  for (const m of matches) {
+    activePlayers.add(m.player1Id);
+    activePlayers.add(m.player2Id);
+  }
+  const activeCount = activePlayers.size;
+
+  const stats: PlayerStatsExtended[] = players.map((player) => {
+    const playerMatches = matches.filter(
+      (m) => m.player1Id === player.id || m.player2Id === player.id,
+    );
+    
+    const wins = playerMatches.filter((m) => m.winnerId === player.id).length;
+    const losses = playerMatches.filter((m) => m.loserId === player.id).length;
+    const totalGames = playerMatches.length;
+    
+    // Calculate win rate
+    const winRate = totalGames > 0 ? wins / totalGames : 0;
+    
+    // Calculate confidence: games / (games + 8)
+    const confidence = totalGames > 0 ? totalGames / (totalGames + 8) : 0;
+    
+    // Calculate distribution (HHI inverted)
+    // First, count games per opponent
+    const gamesPerOpponent = new Map<string, number>();
+    const h2h = new Map<string, H2HRecord>();
+    
+    for (const m of playerMatches) {
+      const opponentId = m.player1Id === player.id ? m.player2Id : m.player1Id;
+      const current = gamesPerOpponent.get(opponentId) || 0;
+      gamesPerOpponent.set(opponentId, current + 1);
+      
+      // Track head-to-head
+      const h2hRecord = h2h.get(opponentId) || { opponentId, wins: 0, losses: 0, games: 0 };
+      if (m.winnerId === player.id) {
+        h2hRecord.wins++;
+      } else {
+        h2hRecord.losses++;
+      }
+      h2hRecord.games++;
+      h2h.set(opponentId, h2hRecord);
+    }
+    
+    // Calculate distribution: 1 - sum((games_vs_opponent / totalGames)^2)
+    let distribution = 0;
+    if (totalGames > 0) {
+      let sumSquares = 0;
+      for (const [, games] of gamesPerOpponent) {
+        const fraction = games / totalGames;
+        sumSquares += fraction * fraction;
+      }
+      distribution = 1 - sumSquares;
+    }
+    
+    // Calculate rating: WinRate × ((Confidence × 0.8) + (Distribution × 0.2)) × 100
+    const multiplier = (confidence * 0.8) + (distribution * 0.2);
+    const rating = winRate * multiplier * 100;
+    
+    return {
+      player,
+      wins,
+      losses,
+      totalGames,
+      winRate,
+      confidence,
+      distribution,
+      rating,
+      opponents: gamesPerOpponent.size,
+      activePlayers: activeCount,
+      gamesPerOpponent,
+      h2h,
+    };
+  });
+  
+  // Sort by rating (descending) with tiebreakers
+  return stats.sort((a, b) => {
+    // First tiebreaker: rating
+    if (b.rating !== a.rating) return b.rating - a.rating;
+    
+    // Both have games - check head-to-head
+    if (a.totalGames > 0 && b.totalGames > 0) {
+      const aH2h = a.h2h.get(b.player.id);
+      const bH2h = b.h2h.get(a.player.id);
+      
+      if (aH2h && bH2h) {
+        if (aH2h.wins !== bH2h.wins) {
+          return bH2h.wins - aH2h.wins; // More wins against opponent ranks higher
+        }
+      }
+    }
+    
+    // Second tiebreaker: total games
+    return b.totalGames - a.totalGames;
+  });
 }

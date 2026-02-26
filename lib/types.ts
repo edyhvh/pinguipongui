@@ -24,3 +24,26 @@ export interface PlayerStats {
   pointsFor: number;
   pointsAgainst: number;
 }
+
+// Extended stats for ranking with rating formula
+export interface H2HRecord {
+  opponentId: string;
+  wins: number;
+  losses: number;
+  games: number;
+}
+
+export interface PlayerStatsExtended {
+  player: Player;
+  wins: number;
+  losses: number;
+  totalGames: number;
+  winRate: number;
+  confidence: number;
+  distribution: number;
+  rating: number;
+  opponents: number; // unique opponents faced
+  activePlayers: number; // total active players in tournament
+  gamesPerOpponent: Map<string, number>; // for distribution calculation
+  h2h: Map<string, H2HRecord>; // head-to-head records
+}

@@ -155,33 +155,33 @@ body {
 /* Standings table */
 .standings-row {
   display: grid;
-  grid-template-columns: 80px 1fr 60px 60px 160px;
+  grid-template-columns: 50px 1fr 80px 70px 70px 70px 50px 50px 70px 70px;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
   padding: 20px 0;
   border-bottom: var(--hairline);
 }
 
-@media (max-width: 600px) {
+@media (max-width: 768px) {
   .standings-row {
-    grid-template-columns: 56px 1fr 48px 48px;
-    gap: 8px;
+    grid-template-columns: 40px 1fr 70px 60px 60px;
+    gap: 6px;
   }
 
-  .standings-bar-col {
+  .standings-col-hide {
     display: none;
   }
 }
 
 .rank-number {
-  font-size: clamp(48px, 6vw, 72px);
+  font-size: clamp(32px, 4vw, 48px);
   font-weight: 900;
   line-height: 1;
   letter-spacing: -0.04em;
 }
 
 .player-name-large {
-  font-size: clamp(20px, 3vw, 28px);
+  font-size: clamp(16px, 2vw, 20px);
   font-weight: 900;
   letter-spacing: -0.02em;
   line-height: 1;
@@ -189,10 +189,10 @@ body {
 }
 
 .stat-number {
-  font-size: clamp(28px, 4vw, 40px);
+  font-size: clamp(14px, 1.6vw, 18px);
   font-weight: 900;
   line-height: 1;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
 }
 
 /* Win rate bar */
