@@ -50,5 +50,6 @@ export async function writeData(data: AppData): Promise<void> {
   await put(BLOB_PATHNAME, JSON.stringify(data), {
     access: 'private',
     addRandomSuffix: false,
+    allowOverwrite: true,
   });
 }
