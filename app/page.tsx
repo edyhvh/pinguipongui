@@ -120,6 +120,116 @@ function StandingsRow({
 }
 
 
+function H2HMatrix({ stats }: { stats: PlayerStatsExtended[] }) {
+  // Only players who have played at least one game
+  const active = stats.filter((s) => s.totalGames > 0);
+  if (active.length < 2) return null;
+
+  return (
+    <section style={{ marginBottom: '64px' }}>
+      <div className="section-header">
+        <span className="section-title">Head-to-Head</span>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `80px repeat(${active.length}, 1fr)`,
+            minWidth: `${80 + active.length * 60}px`,
+          }}
+        >
+          {/* Header row */}
+          <div style={{ borderBottom: '1px solid #000', paddingBottom: '6px' }} />
+          {active.map((col) => (
+            <div
+              key={col.player.id}
+              style={{
+                textAlign: 'center',
+                fontSize: '10px',
+                fontWeight: 900,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                paddingBottom: '6px',
+                borderBottom: '1px solid #000',
+              }}
+            >
+              {col.player.name}
+            </div>
+          ))}
+
+          {/* Data rows */}
+          {active.map((row) => (
+            <div key={row.player.id} style={{ display: 'contents' }}>
+              {/* Row label */}
+              <div
+                key={`label-${row.player.id}`}
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 900,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '10px 0',
+                  borderBottom: '1px solid #e8e4dc',
+                }}
+              >
+                {row.player.name}
+              </div>
+
+              {/* Cells */}
+              {active.map((col) => {
+                const isSelf = row.player.id === col.player.id;
+                const record = row.h2h.get(col.player.id);
+
+                let bg = 'transparent';
+                let textColor = '#000';
+                let content = '—';
+
+                if (isSelf) {
+                  bg = 'rgba(0,0,0,0.04)';
+                  content = '·';
+                  textColor = '#ccc';
+                } else if (record && record.games > 0) {
+                  content = `${record.wins}–${record.losses}`;
+                  if (record.wins > record.losses) {
+                    bg = 'rgba(0,0,0,0.07)';
+                    textColor = '#000';
+                  } else if (record.losses > record.wins) {
+                    bg = 'transparent';
+                    textColor = '#999';
+                  }
+                }
+
+                return (
+                  <div
+                    key={`${row.player.id}-${col.player.id}`}
+                    style={{
+                      textAlign: 'center',
+                      fontSize: '11px',
+                      fontWeight: record && !isSelf ? 900 : 400,
+                      letterSpacing: '0.02em',
+                      padding: '10px 4px',
+                      backgroundColor: bg,
+                      color: textColor,
+                      borderBottom: '1px solid #e8e4dc',
+                    }}
+                  >
+                    {content}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="label-muted" style={{ marginTop: '12px' }}>
+        Row vs column — e.g. "9–4" means the row player won 9, lost 4 against that opponent. Bold = winning record.
+      </div>
+    </section>
+  );
+}
+
 export default function HomePage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
@@ -250,6 +360,9 @@ export default function HomePage() {
           </>
         )}
       </section>
+
+      {/* Head-to-Head Matrix */}
+      {mounted && <H2HMatrix stats={rankedStats} />}
 
     </main>
   );
