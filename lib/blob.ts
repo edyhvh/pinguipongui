@@ -48,7 +48,7 @@ export async function writeData(data: AppData): Promise<void> {
     data.history = data.history.slice(0, MAX_HISTORY);
   }
   await put(BLOB_PATHNAME, JSON.stringify(data), {
-    access: 'public',
+    access: 'private',
     addRandomSuffix: false,
   });
 }
