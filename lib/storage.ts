@@ -33,11 +33,17 @@ export async function removePlayer(id: string): Promise<void> {
   }
 }
 
-export async function addMatchesBulk(entries: Array<{ winnerId: string; loserId: string }>): Promise<void> {
+export async function addMatchesBulk(
+  entries: Array<{ winnerId: string; loserId: string }>,
+  operationId: string,
+): Promise<void> {
   const res = await fetch('/api/matches', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ entries }),
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Idempotency-Key': operationId,
+    },
+    body: JSON.stringify({ entries, operationId }),
   });
   if (!res.ok) {
     const data = await res.json();
