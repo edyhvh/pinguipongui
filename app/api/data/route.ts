@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { readData, writeData } from '../../../lib/blob';
+import { readData, writeData } from '../../../lib/storage-abstraction';
 import { generateSeedData } from '../../../lib/seed';
 
 export async function GET() {
   try {
     let data = await readData();
 
-    // Seed only on the very first request (blob doesn't exist yet)
+    // Seed only on the very first request (no data exists anywhere)
     if (data === null) {
       const { players, matches } = generateSeedData();
       data = { players, matches, history: [], seeded: true };

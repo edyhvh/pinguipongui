@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readData, writeData, emptyData } from '../../../lib/blob';
+import { readData, writeData, emptyData } from '../../../lib/storage-abstraction';
 import { withLock } from '../../../lib/lock';
 
 const IDEMPOTENCY_RE = /^[a-zA-Z0-9_-]{8,128}$/;

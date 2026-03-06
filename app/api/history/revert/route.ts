@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readData, writeData } from '../../../../lib/blob';
+import { readData, writeData } from '../../../../lib/storage-abstraction';
 import { withLock } from '../../../../lib/lock';
 
 export async function POST(req: NextRequest) {
