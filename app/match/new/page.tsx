@@ -35,6 +35,7 @@ export default function NewMatchPage() {
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loadError, setLoadError] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -79,10 +80,19 @@ export default function NewMatchPage() {
   }
 
   async function handleSave() {
-    if (entries.length === 0) return;
+    if (saving || entries.length === 0) return;
+    const snapshot = [...entries];
+    const operationId = crypto.randomUUID().replace(/-/g, '_');
     setSaving(true);
-    await addMatchesBulk(entries);
-    router.push('/');
+    setSaveError('');
+    try {
+      await addMatchesBulk(snapshot, operationId);
+      router.push('/');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to save matches';
+      setSaveError(message);
+      setSaving(false);
+    }
   }
 
   function handlePlayerChange(slot: 1 | 2, id: string) {
@@ -333,6 +343,11 @@ export default function NewMatchPage() {
                       Cancel
                     </Link>
                   </div>
+                  {saveError && (
+                    <div className="msg-error" style={{ marginTop: '14px' }}>
+                      {saveError}
+                    </div>
+                  )}
                 </>
               )}
 

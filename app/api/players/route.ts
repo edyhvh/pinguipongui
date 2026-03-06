@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readData, writeData, emptyData } from '../../../lib/blob';
+import { readData, writeData, emptyData } from '../../../lib/storage-abstraction';
 import { withLock } from '../../../lib/lock';
 
 // Only letters, numbers, spaces, apostrophes, hyphens — no HTML

@@ -1,12 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readData, writeData, emptyData } from '../../../lib/blob';
+import { readData, writeData, emptyData } from '../../../lib/storage-abstraction';
 import { withLock } from '../../../lib/lock';
+
+const IDEMPOTENCY_RE = /^[a-zA-Z0-9_-]{8,128}$/;
+const IDEMPOTENCY_WINDOW_MS = 10 * 60 * 1000;
+
+function makeEntriesHash(entries: Array<{ winnerId: string; loserId: string }>): string {
+  return entries.map((e) => `${e.winnerId}>${e.loserId}`).join('|');
+}
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
     if (!body || !Array.isArray(body.entries)) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+    }
+
+    const idempotencyKeyRaw = req.headers.get('x-idempotency-key') ?? body.operationId;
+    const idempotencyKey = typeof idempotencyKeyRaw === 'string' ? idempotencyKeyRaw.trim() : '';
+    if (!idempotencyKey || !IDEMPOTENCY_RE.test(idempotencyKey)) {
+      return NextResponse.json({ error: 'Missing or invalid operation key' }, { status: 400 });
     }
 
     const { entries } = body;
@@ -32,6 +45,20 @@ export async function POST(req: NextRequest) {
 
     await withLock(async () => {
       const data = await readData() ?? { players: [], matches: [], history: [], seeded: true };
+      const payloadHash = makeEntriesHash(entries);
+      const cutoff = Date.now() - IDEMPOTENCY_WINDOW_MS;
+      const recentOperations = (data.recentOperations ?? []).filter((op) => {
+        const ts = new Date(op.timestamp).getTime();
+        return Number.isFinite(ts) && ts >= cutoff;
+      });
+      const existingOperation = recentOperations.find((op) => op.id === idempotencyKey);
+      if (existingOperation) {
+        if (existingOperation.payloadHash !== payloadHash) {
+          throw Object.assign(new Error('Operation key reused with different data'), { status: 409 });
+        }
+        return;
+      }
+
       const playerIds = new Set(data.players.map((p) => p.id));
 
       for (const e of entries) {
@@ -68,6 +95,11 @@ export async function POST(req: NextRequest) {
       await writeData({
         ...data,
         matches: [...[...newMatches].reverse(), ...data.matches],
+        recentOperations: [{
+          id: idempotencyKey,
+          payloadHash,
+          timestamp: new Date().toISOString(),
+        }, ...recentOperations],
         history: [{
           id: crypto.randomUUID(),
           timestamp: new Date().toISOString(),
@@ -81,6 +113,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (err: any) {
     if (err?.status === 400) return NextResponse.json({ error: err.message }, { status: 400 });
+    if (err?.status === 409) return NextResponse.json({ error: err.message }, { status: 409 });
+    if (err?.status === 503) return NextResponse.json({ error: err.message }, { status: 503 });
     console.error('POST /api/matches:', err);
     return NextResponse.json({ error: 'Failed to add matches' }, { status: 500 });
   }
