@@ -1,12 +1,11 @@
 // Server-only — unified storage abstraction
-// Uses Redis as primary storage, falls back to Blob for migration
-import { readData as readBlobData, writeData as writeBlobData, emptyData as emptyBlobData, AppData as BlobAppData } from './blob';
-import { readData as readRedisData, writeData as writeRedisData, emptyData as emptyRedisData, isRedisAvailable, AppData as RedisAppData } from './redis-storage';
-import type { Player, Match, HistoryEntry } from './types';
+// Uses Redis as primary storage, falls back to JSON file for backup/restore
+import { readData as readJsonData, writeData as writeJsonData, emptyData as emptyJsonData, AppData as JsonAppData } from './json-file-storage';
+import { readData as readRedisData, writeData as writeRedisData, isRedisAvailable } from './redis-storage';
 
-export type AppData = BlobAppData;
+export type AppData = JsonAppData;
 
-// Helper to read data - tries Redis first, then Blob, then returns null
+// Helper to read data - tries Redis first, then JSON file, then returns null
 export async function readData(): Promise<AppData | null> {
   // Try Redis first
   if (isRedisAvailable()) {
@@ -16,38 +15,44 @@ export async function readData(): Promise<AppData | null> {
         return redisData;
       }
     } catch (e) {
-      console.warn('Redis read failed, trying Blob:', e);
+      console.warn('Redis read failed, trying JSON file:', e);
     }
   }
   
-  // Fall back to Blob
+  // Fall back to JSON file (backup/restore source)
   try {
-    const blobData = await readBlobData();
-    if (blobData !== null) {
-      return blobData;
+    const jsonData = await readJsonData();
+    if (jsonData !== null) {
+      return jsonData;
     }
   } catch (e) {
-    console.warn('Blob read failed:', e);
+    console.warn('JSON file read failed:', e);
   }
   
   return null;
 }
 
 export async function writeData(data: AppData): Promise<void> {
-  // Try Redis first
+  // Write to Redis (primary storage)
   if (isRedisAvailable()) {
     try {
       await writeRedisData(data);
+      // Also write to JSON file as backup
+      try {
+        await writeJsonData(data);
+      } catch (e) {
+        console.error('JSON backup write failed — backup may be out of sync:', e);
+      }
       return;
     } catch (e) {
-      console.warn('Redis write failed, trying Blob:', e);
+      console.warn('Redis write failed:', e);
     }
   }
   
-  // Fall back to Blob
-  await writeBlobData(data);
+  // Fall back to JSON file if Redis is not available
+  await writeJsonData(data);
 }
 
 export function emptyData(): AppData {
-  return emptyBlobData();
+  return emptyJsonData();
 }
