@@ -2,7 +2,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readData as readRedisData, writeData as writeRedisData, isRedisAvailable } from '@/lib/redis-storage';
 import { readData as readJsonData, writeData as writeJsonData } from '@/lib/json-file-storage';
-import { readData as readStorageData } from '@/lib/storage-abstraction';
+
+function checkAdminAuth(request: NextRequest): boolean {
+  const secret = process.env.ADMIN_API_SECRET;
+  if (!secret) {
+    // If no secret is configured, disallow all sensitive operations
+    return false;
+  }
+  const authHeader = request.headers.get('authorization');
+  if (authHeader && authHeader === `Bearer ${secret}`) {
+    return true;
+  }
+  const tokenParam = request.nextUrl.searchParams.get('token');
+  return tokenParam === secret;
+}
 
 // POST /api/backup - Export current data to JSON file (backup)
 export async function POST(request: NextRequest) {
@@ -11,6 +24,12 @@ export async function POST(request: NextRequest) {
     const action = searchParams.get('action');
 
     if (action === 'export') {
+      if (!checkAdminAuth(request)) {
+        return NextResponse.json(
+          { success: false, message: 'Unauthorized' },
+          { status: 401 }
+        );
+      }
       // Export from Redis to JSON file
       if (!isRedisAvailable()) {
         return NextResponse.json(
@@ -38,6 +57,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'restore') {
+      if (!checkAdminAuth(request)) {
+        return NextResponse.json(
+          { success: false, message: 'Unauthorized' },
+          { status: 401 }
+        );
+      }
+
       // Restore from JSON file to Redis
       if (!isRedisAvailable()) {
         return NextResponse.json(

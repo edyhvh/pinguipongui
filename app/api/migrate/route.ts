@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readData as readJsonData, writeData as writeJsonData } from '../../../lib/json-file-storage';
+import { readData as readJsonData } from '../../../lib/json-file-storage';
 import { readData as readRedisData, writeData as writeRedisData, isRedisAvailable } from '../../../lib/redis-storage';
 
 // This endpoint handles data restoration from JSON backup to Redis
 // Use ?force=true to overwrite existing data
 export async function POST(request: NextRequest) {
   try {
+    if (!isRedisAvailable()) {
+      return NextResponse.json(
+        { error: 'Redis is not configured. Please set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN environment variables.' },
+        { status: 503 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const force = searchParams.get('force') === 'true';
 
