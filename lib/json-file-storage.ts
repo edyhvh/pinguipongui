@@ -72,7 +72,15 @@ export async function readData(): Promise<AppData | null> {
   }
 }
 
-export async function writeData(data: AppData): Promise<void> {
+export async function writeData(data: AppData, filePath?: string): Promise<void> {
+  // On Vercel/serverless deployments the filesystem is read-only; skip file writes.
+  if (process.env.VERCEL) {
+    console.warn('JSON file write skipped: running on Vercel (read-only filesystem). Use Redis as primary storage.');
+    return;
+  }
+
+  const targetPath = filePath || DATA_FILE_PATH;
+
   const trimmedData = { ...data };
   if (trimmedData.history && trimmedData.history.length > MAX_HISTORY) {
     trimmedData.history = trimmedData.history.slice(0, MAX_HISTORY);
@@ -81,7 +89,7 @@ export async function writeData(data: AppData): Promise<void> {
     trimmedData.recentOperations = trimmedData.recentOperations.slice(0, MAX_RECENT_OPERATIONS);
   }
 
-  await fs.writeFile(DATA_FILE_PATH, JSON.stringify(trimmedData, null, 2), 'utf-8');
+  await fs.writeFile(targetPath, JSON.stringify(trimmedData, null, 2) + '\n', 'utf-8');
 }
 
 // Utility function to export Redis data to JSON file (for backup)
@@ -98,7 +106,7 @@ export async function exportFromRedis(
 
     const targetPath = outputPath || DATA_FILE_PATH;
 
-    await writeData(redisData);
+    await writeData(redisData, targetPath);
 
     return {
       success: true,

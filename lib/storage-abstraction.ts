@@ -1,8 +1,7 @@
 // Server-only — unified storage abstraction
 // Uses Redis as primary storage, falls back to JSON file for backup/restore
 import { readData as readJsonData, writeData as writeJsonData, emptyData as emptyJsonData, AppData as JsonAppData } from './json-file-storage';
-import { readData as readRedisData, writeData as writeRedisData, emptyData as emptyRedisData, isRedisAvailable, AppData as RedisAppData } from './redis-storage';
-import type { Player, Match, HistoryEntry } from './types';
+import { readData as readRedisData, writeData as writeRedisData, isRedisAvailable } from './redis-storage';
 
 export type AppData = JsonAppData;
 
@@ -42,7 +41,7 @@ export async function writeData(data: AppData): Promise<void> {
       try {
         await writeJsonData(data);
       } catch (e) {
-        console.warn('JSON file write failed:', e);
+        console.error('JSON backup write failed — backup may be out of sync:', e);
       }
       return;
     } catch (e) {
