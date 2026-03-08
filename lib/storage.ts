@@ -2,7 +2,7 @@
 
 import type { Player, Match, PlayerStats, PlayerStatsExtended, H2HRecord, HistoryEntry } from './types';
 
-// ─── API callers (client → API routes → Vercel Blob) ──────────────────────────
+// ─── API callers (client → API routes → Redis/JSON file) ──────────────────────────
 
 export async function getAllData(): Promise<{ players: Player[]; matches: Match[]; history: HistoryEntry[] }> {
   const res = await fetch('/api/data', { cache: 'no-store' });

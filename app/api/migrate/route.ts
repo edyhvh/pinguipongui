@@ -1,48 +1,48 @@
-import { NextResponse } from 'next/server';
-import { readData as readBlobData, writeData as writeBlobData, emptyData } from '../../../lib/blob';
-import { readData as readRedisData, writeData as writeRedisData, migrateFromBlob, isRedisAvailable } from '../../../lib/redis-storage';
+import { NextRequest, NextResponse } from 'next/server';
+import { readData as readJsonData, writeData as writeJsonData } from '../../../lib/json-file-storage';
+import { readData as readRedisData, writeData as writeRedisData, isRedisAvailable } from '../../../lib/redis-storage';
 
-// This endpoint migrates data from Vercel Blob to Upstash Redis
-export async function POST() {
+// This endpoint handles data restoration from JSON backup to Redis
+// Use ?force=true to overwrite existing data
+export async function POST(request: NextRequest) {
   try {
+    const searchParams = request.nextUrl.searchParams;
+    const force = searchParams.get('force') === 'true';
+
     // First, check what's currently in Redis
     const existingRedisData = await readRedisData();
     
-    if (existingRedisData && existingRedisData.players.length > 0) {
+    if (existingRedisData && existingRedisData.players.length > 0 && !force) {
       return NextResponse.json({
         alreadyMigrated: true,
-        message: 'Data already exists in Redis. No migration needed.',
+        message: 'Data already exists in Redis. No restore needed. Use ?force=true to overwrite.',
         playersCount: existingRedisData.players.length,
         matchesCount: existingRedisData.matches.length,
       });
     }
 
-    // Perform migration from Blob to Redis
-    const result = await migrateFromBlob(async () => {
-      const data = await readBlobData();
-      if (!data) return null;
-      return {
-        players: data.players,
-        matches: data.matches,
-        history: data.history,
-        seeded: data.seeded,
-        recentOperations: data.recentOperations,
-      };
-    });
-
-    if (result.success) {
-      return NextResponse.json({
-        success: true,
-        message: result.message,
-        playersCount: result.playersCount,
-        matchesCount: result.matchesCount,
-      });
-    } else {
-      return NextResponse.json({ error: result.message }, { status: 500 });
+    // Try to restore from JSON backup file
+    const jsonData = await readJsonData();
+    
+    if (!jsonData) {
+      return NextResponse.json(
+        { error: 'No backup file found. Please ensure pinguipongui-data.json exists in the project root.' },
+        { status: 404 }
+      );
     }
+
+    // Write to Redis
+    await writeRedisData(jsonData);
+
+    return NextResponse.json({
+      success: true,
+      message: `Successfully restored ${jsonData.players.length} players and ${jsonData.matches.length} matches to Redis`,
+      playersCount: jsonData.players.length,
+      matchesCount: jsonData.matches.length,
+    });
   } catch (err) {
-    console.error('Migration error:', err);
-    return NextResponse.json({ error: 'Migration failed' }, { status: 500 });
+    console.error('Restore error:', err);
+    return NextResponse.json({ error: 'Restore failed' }, { status: 500 });
   }
 }
 
@@ -51,13 +51,13 @@ export async function GET() {
   try {
     const redisAvailable = isRedisAvailable();
     
-    let blobData = null;
+    let jsonData = null;
     let redisData = null;
     
     try {
-      blobData = await readBlobData();
+      jsonData = await readJsonData();
     } catch (e) {
-      // Blob might not exist
+      // JSON file might not exist
     }
     
     try {
@@ -68,11 +68,11 @@ export async function GET() {
 
     return NextResponse.json({
       redisConfigured: redisAvailable,
-      blob: blobData ? {
-        playersCount: blobData.players.length,
-        matchesCount: blobData.matches.length,
-        historyCount: blobData.history.length,
-        seeded: blobData.seeded,
+      jsonBackup: jsonData ? {
+        playersCount: jsonData.players.length,
+        matchesCount: jsonData.matches.length,
+        historyCount: jsonData.history.length,
+        seeded: jsonData.seeded,
       } : null,
       redis: redisData ? {
         playersCount: redisData.players.length,
