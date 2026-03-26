@@ -121,6 +121,10 @@ body {
   color: var(--cream);
 }
 
+.nav-github {
+  padding: 0 14px;
+}
+
 /* Page container */
 .page {
   max-width: 960px;
