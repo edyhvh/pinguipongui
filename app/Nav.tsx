@@ -39,7 +39,7 @@ export default function Nav() {
           </li>
           <li>
             <a
-              href="https://github.com/edyhvh/pinguipongui"
+              href="https://github.com/jhonnyisaacc/pinguipongui"
               target="_blank"
               rel="noopener noreferrer"
               className="nav-link nav-github"
