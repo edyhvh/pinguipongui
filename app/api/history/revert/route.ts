@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readData, writeData } from '../../../../lib/storage-abstraction';
+import { readData, writeData, emptyData } from '../../../../lib/storage-abstraction';
 import { withLock } from '../../../../lib/lock';
 
 export async function POST(req: NextRequest) {
@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     }
 
     await withLock(async () => {
-      const data = await readData() ?? { players: [], matches: [], history: [], seeded: true };
+      const data = await readData() ?? emptyData();
       const entry = data.history.find((e) => e.id === id);
       if (!entry) throw Object.assign(new Error('History entry not found'), { status: 404 });
       if (entry.action === 'revert') {
@@ -54,9 +54,11 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ ok: true });
-  } catch (err: any) {
-    if (err?.status === 404) return NextResponse.json({ error: err.message }, { status: 404 });
-    if (err?.status === 400) return NextResponse.json({ error: err.message }, { status: 400 });
+  } catch (err: unknown) {
+    const status = typeof err === 'object' && err !== null && 'status' in err ? err.status : undefined;
+    const message = err instanceof Error ? err.message : 'Failed to revert';
+    if (status === 404) return NextResponse.json({ error: message }, { status: 404 });
+    if (status === 400) return NextResponse.json({ error: message }, { status: 400 });
     console.error('POST /api/history/revert:', err);
     return NextResponse.json({ error: 'Failed to revert' }, { status: 500 });
   }

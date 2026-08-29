@@ -61,7 +61,7 @@ export default function RankingPage() {
                 <code style={{ backgroundColor: '#f0ede7', padding: '2px 6px' }}>wins / total games</code>
               </div>
               <div className="label-muted">
-                The basic win percentage — what fraction of games you've won.
+                The basic win percentage — what fraction of games you&apos;ve won.
               </div>
             </div>
           </div>

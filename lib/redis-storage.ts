@@ -1,12 +1,16 @@
 // Server-only — no 'use client'
 import { Redis } from '@upstash/redis';
-import type { Player, Match, HistoryEntry } from './types';
+import type { Player, Match, HistoryEntry, ArchivedSeason } from './types';
+import { CURRENT_SEASON_ID } from './types';
 
 export interface AppData {
   players: Player[];
   matches: Match[];
   history: HistoryEntry[];
   seeded: boolean;
+  schemaVersion: 2;
+  currentSeasonId: string;
+  archivedSeasons: ArchivedSeason[];
   recentOperations?: {
     id: string;
     payloadHash: string;
@@ -36,7 +40,59 @@ export function isRedisAvailable(): boolean {
 }
 
 export function emptyData(): AppData {
-  return { players: [], matches: [], history: [], seeded: false, recentOperations: [] };
+  return {
+    players: [], matches: [], history: [], seeded: false, schemaVersion: 2,
+    currentSeasonId: CURRENT_SEASON_ID, archivedSeasons: [], recentOperations: [],
+  };
+}
+
+function normalizeData(raw: Record<string, unknown>): { data: AppData; migrated: boolean } {
+  const recentOperations = Array.isArray(raw.recentOperations) ? raw.recentOperations : [];
+  const currentPlayers = Array.isArray(raw.players) ? raw.players as Player[] : [];
+  const currentMatches = Array.isArray(raw.matches) ? raw.matches as Match[] : [];
+  const currentHistory = Array.isArray(raw.history) ? raw.history as HistoryEntry[] : [];
+
+  if (raw.schemaVersion === 2 && typeof raw.currentSeasonId === 'string') {
+    return {
+      data: {
+        players: currentPlayers,
+        matches: currentMatches,
+        history: currentHistory,
+        seeded: !!raw.seeded,
+        schemaVersion: 2,
+        currentSeasonId: raw.currentSeasonId,
+        archivedSeasons: Array.isArray(raw.archivedSeasons) ? raw.archivedSeasons as ArchivedSeason[] : [],
+        recentOperations: recentOperations as AppData['recentOperations'],
+      },
+      migrated: false,
+    };
+  }
+
+  const now = new Date().toISOString();
+  const archivedSeason: ArchivedSeason = {
+    id: 'before-september-2026',
+    name: 'Previous season',
+    startedAt: currentMatches.at(-1)?.playedAt ?? currentPlayers.at(0)?.createdAt ?? now,
+    endedAt: now,
+    players: currentPlayers,
+    matches: currentMatches,
+    history: currentHistory,
+  };
+
+  return {
+    data: {
+      // Keep the roster, but intentionally start the new season without results.
+      players: currentPlayers,
+      matches: [],
+      history: [],
+      seeded: false,
+      schemaVersion: 2,
+      currentSeasonId: CURRENT_SEASON_ID,
+      archivedSeasons: currentPlayers.length || currentMatches.length || currentHistory.length ? [archivedSeason] : [],
+      recentOperations: [],
+    },
+    migrated: true,
+  };
 }
 
 // Returns null if data doesn't exist yet, throws on read errors
@@ -45,17 +101,16 @@ export async function readData(): Promise<AppData | null> {
     throw new Error('Redis is not configured. Please set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN.');
   }
 
-  const raw = await redis.get<{
-    players: Player[];
-    matches: Match[];
-    history: HistoryEntry[];
-    seeded: boolean;
-    recentOperations?: RecentOperation[];
-  }>(DATA_KEY);
+  const raw = await redis.get<Record<string, unknown>>(DATA_KEY);
 
   if (!raw) return null;
 
-  const rawRecent = Array.isArray(raw.recentOperations) ? raw.recentOperations : [];
+  const normalized = normalizeData(raw);
+  if (normalized.migrated) {
+    await redis.set(DATA_KEY, normalized.data);
+  }
+
+  const rawRecent = Array.isArray(normalized.data.recentOperations) ? normalized.data.recentOperations : [];
   const recentOperations: RecentOperation[] = rawRecent
     .flatMap((op: unknown) => {
       if (!op || typeof op !== 'object') return [];
@@ -72,10 +127,7 @@ export async function readData(): Promise<AppData | null> {
     .slice(0, MAX_RECENT_OPERATIONS);
 
   return {
-    players: Array.isArray(raw.players) ? raw.players : [],
-    matches: Array.isArray(raw.matches) ? raw.matches : [],
-    history: Array.isArray(raw.history) ? raw.history : [],
-    seeded: !!raw.seeded,
+    ...normalized.data,
     recentOperations,
   };
 }

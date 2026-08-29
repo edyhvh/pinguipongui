@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getAllData, getPlayerStatsExtended } from '../lib/storage';
+import { CURRENT_SEASON_LABEL } from '../lib/types';
 import type { Player, Match, PlayerStatsExtended } from '../lib/types';
 
 function formatPct(value: number): string {
@@ -224,7 +225,7 @@ function H2HMatrix({ stats }: { stats: PlayerStatsExtended[] }) {
         </div>
       </div>
       <div className="label-muted" style={{ marginTop: '12px' }}>
-        Row vs column — e.g. "9–4" means the row player won 9, lost 4 against that opponent. Bold = winning record.
+        Row vs column — e.g. &quot;9–4&quot; means the row player won 9, lost 4 against that opponent. Bold = winning record.
       </div>
     </section>
   );
@@ -249,15 +250,13 @@ export default function HomePage() {
         setLoadError(false);
         setMounted(true);
       } catch {
-        if (!cancelled && !mounted) setLoadError(true);
+        if (!cancelled) setLoadError(true);
       }
     }
     load();
     const interval = setInterval(load, 10000);
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
-
-  const year = new Date().getFullYear();
 
   // Separate players with games from those without
   const playersWithGames = stats.filter(s => s.totalGames > 0);
@@ -283,7 +282,8 @@ export default function HomePage() {
             <div className="page-title">
               Ugly<br />Pong
             </div>
-            <div className="page-subtitle">Tracker · Season {year}</div>
+            <div className="page-subtitle">Tracker · {CURRENT_SEASON_LABEL}</div>
+            <div className="season-sticker" aria-label="New Season">New Season</div>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div

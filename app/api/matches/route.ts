@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     }
 
     await withLock(async () => {
-      const data = await readData() ?? { players: [], matches: [], history: [], seeded: true };
+      const data = await readData() ?? emptyData();
       const payloadHash = makeEntriesHash(entries);
       const cutoff = Date.now() - IDEMPOTENCY_WINDOW_MS;
       const recentOperations = (data.recentOperations ?? []).filter((op) => {
@@ -111,10 +111,12 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ ok: true }, { status: 201 });
-  } catch (err: any) {
-    if (err?.status === 400) return NextResponse.json({ error: err.message }, { status: 400 });
-    if (err?.status === 409) return NextResponse.json({ error: err.message }, { status: 409 });
-    if (err?.status === 503) return NextResponse.json({ error: err.message }, { status: 503 });
+  } catch (err: unknown) {
+    const status = typeof err === 'object' && err !== null && 'status' in err ? err.status : undefined;
+    const message = err instanceof Error ? err.message : 'Failed to add matches';
+    if (status === 400) return NextResponse.json({ error: message }, { status: 400 });
+    if (status === 409) return NextResponse.json({ error: message }, { status: 409 });
+    if (status === 503) return NextResponse.json({ error: message }, { status: 503 });
     console.error('POST /api/matches:', err);
     return NextResponse.json({ error: 'Failed to add matches' }, { status: 500 });
   }
@@ -149,8 +151,10 @@ export async function DELETE(req: NextRequest) {
     });
 
     return NextResponse.json({ ok: true });
-  } catch (err: any) {
-    if (err?.status === 404) return NextResponse.json({ error: err.message }, { status: 404 });
+  } catch (err: unknown) {
+    const status = typeof err === 'object' && err !== null && 'status' in err ? err.status : undefined;
+    const message = err instanceof Error ? err.message : 'Failed to remove match';
+    if (status === 404) return NextResponse.json({ error: message }, { status: 404 });
     console.error('DELETE /api/matches:', err);
     return NextResponse.json({ error: 'Failed to remove match' }, { status: 500 });
   }
