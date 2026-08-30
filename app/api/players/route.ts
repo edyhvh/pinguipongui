@@ -44,8 +44,10 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json(player, { status: 201 });
-  } catch (err: any) {
-    if (err?.status === 409) return NextResponse.json({ error: err.message }, { status: 409 });
+  } catch (err: unknown) {
+    const status = typeof err === 'object' && err !== null && 'status' in err ? err.status : undefined;
+    const message = err instanceof Error ? err.message : 'Failed to add player';
+    if (status === 409) return NextResponse.json({ error: message }, { status: 409 });
     console.error('POST /api/players:', err);
     return NextResponse.json({ error: 'Failed to add player' }, { status: 500 });
   }
@@ -78,8 +80,10 @@ export async function DELETE(req: NextRequest) {
     });
 
     return NextResponse.json({ ok: true });
-  } catch (err: any) {
-    if (err?.status === 404) return NextResponse.json({ error: err.message }, { status: 404 });
+  } catch (err: unknown) {
+    const status = typeof err === 'object' && err !== null && 'status' in err ? err.status : undefined;
+    const message = err instanceof Error ? err.message : 'Failed to remove player';
+    if (status === 404) return NextResponse.json({ error: message }, { status: 404 });
     console.error('DELETE /api/players:', err);
     return NextResponse.json({ error: 'Failed to remove player' }, { status: 500 });
   }

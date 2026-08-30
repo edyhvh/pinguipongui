@@ -2,13 +2,17 @@
 // JSON file storage as backup/restore source for Redis
 import fs from 'fs/promises';
 import path from 'path';
-import type { Player, Match, HistoryEntry } from './types';
+import type { Player, Match, HistoryEntry, ArchivedSeason } from './types';
+import { CURRENT_SEASON_ID } from './types';
 
 export interface AppData {
   players: Player[];
   matches: Match[];
   history: HistoryEntry[];
   seeded: boolean;
+  schemaVersion: 2;
+  currentSeasonId: string;
+  archivedSeasons: ArchivedSeason[];
   recentOperations?: {
     id: string;
     payloadHash: string;
@@ -27,7 +31,10 @@ const MAX_HISTORY = 100;
 const MAX_RECENT_OPERATIONS = 200;
 
 export function emptyData(): AppData {
-  return { players: [], matches: [], history: [], seeded: false, recentOperations: [] };
+  return {
+    players: [], matches: [], history: [], seeded: false, schemaVersion: 2,
+    currentSeasonId: CURRENT_SEASON_ID, archivedSeasons: [], recentOperations: [],
+  };
 }
 
 // Returns null if the file doesn't exist yet, throws on read errors
@@ -59,12 +66,36 @@ export async function readData(): Promise<AppData | null> {
       })
       .slice(0, MAX_RECENT_OPERATIONS);
 
+    const players = Array.isArray(raw.players) ? raw.players as Player[] : [];
+    const matches = Array.isArray(raw.matches) ? raw.matches as Match[] : [];
+    const history = Array.isArray(raw.history) ? raw.history as HistoryEntry[] : [];
+    if (raw.schemaVersion === 2 && typeof raw.currentSeasonId === 'string') {
+      return {
+        players, matches, history, seeded: !!raw.seeded, schemaVersion: 2,
+        currentSeasonId: raw.currentSeasonId,
+        archivedSeasons: Array.isArray(raw.archivedSeasons) ? raw.archivedSeasons as ArchivedSeason[] : [],
+        recentOperations,
+      };
+    }
+
+    const now = new Date().toISOString();
     return {
-      players: Array.isArray(raw.players) ? raw.players : [],
-      matches: Array.isArray(raw.matches) ? raw.matches : [],
-      history: Array.isArray(raw.history) ? raw.history : [],
-      seeded: !!raw.seeded,
-      recentOperations,
+      players,
+      matches: [],
+      history: [],
+      seeded: false,
+      schemaVersion: 2,
+      currentSeasonId: CURRENT_SEASON_ID,
+      archivedSeasons: players.length || matches.length || history.length ? [{
+        id: 'before-september-2026',
+        name: 'Previous season',
+        startedAt: matches.at(-1)?.playedAt ?? players.at(0)?.createdAt ?? now,
+        endedAt: now,
+        players,
+        matches,
+        history,
+      }] : [],
+      recentOperations: [],
     };
   } catch (error) {
     console.error('Error reading JSON file:', error);

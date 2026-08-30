@@ -15,6 +15,19 @@ export interface Match {
   playedAt: string;
 }
 
+export interface ArchivedSeason {
+  id: string;
+  name: string;
+  startedAt: string;
+  endedAt: string;
+  players: Player[];
+  matches: Match[];
+  history: HistoryEntry[];
+}
+
+export const CURRENT_SEASON_ID = 'september-2026';
+export const CURRENT_SEASON_LABEL = 'September 2026';
+
 export interface PlayerStats {
   player: Player;
   wins: number;

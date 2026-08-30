@@ -95,6 +95,7 @@ body {
   display: flex;
   gap: 0;
   list-style: none;
+  overflow-x: auto;
 }
 
 .nav-link {
@@ -110,6 +111,7 @@ body {
   align-items: center;
   border-left: var(--hairline);
   transition: background 0.1s;
+  white-space: nowrap;
 }
 
 .nav-link:hover {
@@ -119,6 +121,19 @@ body {
 .nav-link.active {
   background-color: var(--black);
   color: var(--cream);
+}
+
+.season-sticker {
+  display: inline-block;
+  margin-top: 18px;
+  padding: 8px 12px;
+  background-color: var(--orange);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  transform: rotate(-3deg);
 }
 
 .nav-github {
@@ -251,6 +266,48 @@ body {
   font-weight: 400;
   margin: 0 8px;
   opacity: 0.3;
+}
+
+.previous-season-row {
+  display: grid;
+  grid-template-columns: 44px 1fr 72px 48px 48px 56px 72px;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid #ccc;
+}
+
+.previous-season-header {
+  padding: 0 0 8px;
+  border-bottom: 1px solid #000;
+}
+
+.previous-match-row {
+  display: grid;
+  grid-template-columns: 88px 1fr auto 1fr 56px;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid #ccc;
+}
+
+.match-score-small {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  text-align: right;
+}
+
+@media (max-width: 600px) {
+  .previous-season-row {
+    grid-template-columns: 28px 1fr 56px 32px 32px 48px 56px;
+    gap: 6px;
+  }
+
+  .previous-match-row {
+    grid-template-columns: 56px 1fr auto 1fr 44px;
+    gap: 8px;
+  }
 }
 
 /* Button styles */

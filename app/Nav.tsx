@@ -31,6 +31,14 @@ export default function Nav() {
           </li>
           <li>
             <Link
+              href="/previous-season"
+              className={`nav-link${pathname === '/previous-season' ? ' active' : ''}`}
+            >
+              Previous season
+            </Link>
+          </li>
+          <li>
+            <Link
               href="/ranking"
               className={`nav-link${pathname === '/ranking' ? ' active' : ''}`}
             >

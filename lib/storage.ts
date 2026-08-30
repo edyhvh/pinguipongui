@@ -1,6 +1,6 @@
 'use client';
 
-import type { Player, Match, PlayerStats, PlayerStatsExtended, H2HRecord, HistoryEntry } from './types';
+import type { Player, Match, PlayerStats, PlayerStatsExtended, H2HRecord, HistoryEntry, ArchivedSeason } from './types';
 
 // ─── API callers (client → API routes → Redis/JSON file) ──────────────────────────
 
@@ -8,6 +8,13 @@ export async function getAllData(): Promise<{ players: Player[]; matches: Match[
   const res = await fetch('/api/data', { cache: 'no-store' });
   if (!res.ok) throw new Error('Failed to load data');
   return res.json();
+}
+
+export async function getPreviousSeason(): Promise<ArchivedSeason | null> {
+  const res = await fetch('/api/previous-season', { cache: 'no-store' });
+  if (!res.ok) throw new Error('Failed to load previous season');
+  const data = await res.json() as { season: ArchivedSeason | null };
+  return data.season;
 }
 
 export async function addPlayer(name: string): Promise<Player> {
