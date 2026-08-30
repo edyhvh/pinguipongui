@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getPlayerStats, getPreviousSeason } from '../../lib/storage';
-import type { ArchivedSeason, PlayerStats } from '../../lib/types';
+import { getPlayerStatsExtended, getPreviousSeason } from '../../lib/storage';
+import type { ArchivedSeason, PlayerStatsExtended } from '../../lib/types';
 
 function formatDate(isoString: string): string {
   return new Date(isoString).toLocaleDateString('en-GB', {
@@ -14,7 +14,7 @@ function formatDate(isoString: string): string {
 
 export default function PreviousSeasonPage() {
   const [season, setSeason] = useState<ArchivedSeason | null>(null);
-  const [stats, setStats] = useState<PlayerStats[]>([]);
+  const [stats, setStats] = useState<PlayerStatsExtended[]>([]);
   const [mounted, setMounted] = useState(false);
   const [loadError, setLoadError] = useState(false);
 
@@ -22,7 +22,7 @@ export default function PreviousSeasonPage() {
     getPreviousSeason()
       .then((data) => {
         setSeason(data);
-        if (data) setStats(getPlayerStats(data.players, data.matches));
+        if (data) setStats(getPlayerStatsExtended(data.players, data.matches));
         setMounted(true);
       })
       .catch(() => {
@@ -59,20 +59,26 @@ export default function PreviousSeasonPage() {
               <div className="previous-season-row previous-season-header">
                 <div className="label">#</div>
                 <div className="label">Player</div>
+                <div className="label" style={{ textAlign: 'right' }}>Rating</div>
                 <div className="label" style={{ textAlign: 'center' }}>W</div>
                 <div className="label" style={{ textAlign: 'center' }}>L</div>
+                <div className="label" style={{ textAlign: 'center' }}>Games</div>
                 <div className="label" style={{ textAlign: 'right' }}>Win %</div>
               </div>
               {stats.map((stat, index) => (
                 <div key={stat.player.id} className="previous-season-row">
-                  <div className="rank-number" style={{ color: index === 0 && stat.totalMatches > 0 ? '#ff4500' : '#000' }}>
-                    {stat.totalMatches > 0 ? index + 1 : '—'}
+                  <div className="rank-number" style={{ color: index === 0 && stat.totalGames > 0 ? '#ff4500' : '#000' }}>
+                    {stat.totalGames > 0 ? index + 1 : '—'}
                   </div>
                   <div className="player-name-large">{stat.player.name}</div>
+                  <div className="stat-number" style={{ textAlign: 'right' }}>
+                    {stat.totalGames > 0 ? stat.rating.toFixed(2) : '—'}
+                  </div>
                   <div className="stat-number" style={{ textAlign: 'center' }}>{stat.wins}</div>
                   <div className="stat-number" style={{ textAlign: 'center', color: '#666' }}>{stat.losses}</div>
+                  <div className="stat-number" style={{ textAlign: 'center' }}>{stat.totalGames}</div>
                   <div className="stat-number" style={{ textAlign: 'right' }}>
-                    {stat.totalMatches > 0 ? `${Math.round(stat.winRate * 100)}%` : '—'}
+                    {stat.totalGames > 0 ? `${Math.round(stat.winRate * 100)}%` : '—'}
                   </div>
                 </div>
               ))}
